@@ -1,0 +1,12 @@
+{
+  "name": "zerofailed-tools",
+  "displayName": "ZeroFailed Tools",
+  "description": "Tools for working with the ZeroFailed automation framework — includes author-zerofailed-extension for scaffolding and extending ZeroFailed extension modules",
+  "author": {
+    "name": "ZeroFailed",
+    "url": "https://github.com/zerofailed"
+  },
+  "license": "Apache-2.0",
+  "keywords": ["zerofailed", "powershell", "invokebuild", "devops", "build"],
+  "repository": "https://github.com/zerofailed/zerofailed-marketplace"
+}

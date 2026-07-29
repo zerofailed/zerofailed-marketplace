@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "zerofailed",
+  "description": "ZeroFailed's marketplace of Claude Code plugins and skills",
+  "owner": {
+    "name": "ZeroFailed",
+    "email": "howard.vanrooijen@endjin.com",
+    "url": "https://github.com/zerofailed"
+  },
+  "plugins": [
+    {
+      "name": "zerofailed-tools",
+      "source": "./plugins/zerofailed-tools",
+      "description": "Tools for working with the ZeroFailed automation framework — includes author-zerofailed-extension for scaffolding and extending ZeroFailed extension modules",
+      "author": {
+        "name": "ZeroFailed"
+      },
+      "license": "Apache-2.0",
+      "keywords": ["zerofailed", "powershell", "invokebuild", "devops", "build"],
+      "category": "devops",
+      "repository": "https://github.com/zerofailed/zerofailed-marketplace"
+    }
+  ]
+}
