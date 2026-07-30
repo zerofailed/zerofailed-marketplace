@@ -11,12 +11,12 @@
     {
       "name": "zerofailed-tools",
       "source": "./plugins/zerofailed-tools",
-      "description": "Tools for working with the ZeroFailed automation framework — includes author-zerofailed-extension for scaffolding and extending ZeroFailed extension modules",
+      "description": "Tools for working with the ZeroFailed automation framework — includes author-zerofailed-extension for scaffolding and extending ZeroFailed extension modules, plus a reference skill for each ZeroFailed build/deploy extension (DevOps.Common, Build.Common/DotNet/PowerShell/Python/GitHub/Containers, Deploy.Common/Azure/PowerBI/Fabric) covering their properties, tasks and dependency chains",
       "author": {
         "name": "ZeroFailed"
       },
       "license": "Apache-2.0",
-      "keywords": ["zerofailed", "powershell", "invokebuild", "devops", "build"],
+      "keywords": ["zerofailed", "powershell", "invokebuild", "devops", "build", "deploy", "dotnet", "python", "azure", "containers", "github", "powerbi", "fabric"],
       "category": "devops",
       "repository": "https://github.com/zerofailed/zerofailed-marketplace"
     }
