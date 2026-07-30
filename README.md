@@ -1,6 +1,6 @@
-# ZeroFailed Claude Code Marketplace
+# ZeroFailed Agentic AI Marketplace
 
-A [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for sharing plugins and skills that help you work with [ZeroFailed](https://github.com/zerofailed/ZeroFailed).
+A marketplace of plugins and skills that help AI coding agents work with [ZeroFailed](https://github.com/zerofailed/ZeroFailed). It uses the [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) format, which [GitHub Copilot CLI also reads directly](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-marketplace), and its skills follow the cross-agent [Agent Skills standard](https://github.blog/changelog/2025-12-18-github-copilot-now-supports-agent-skills/) — so the same repo serves Claude Code, Copilot CLI, and any other agent that understands `SKILL.md`.
 
 ## Structure
 
@@ -13,15 +13,18 @@ zerofailed-marketplace/
         ├── .claude-plugin/
         │   └── plugin.json           # Plugin manifest
         └── skills/
-            └── author-zerofailed-extension/
-                └── SKILL.md          # One directory per skill
+            ├── author-zerofailed-extension/
+            │   └── SKILL.md          # One directory per skill
+            ├── zerofailed-build-dotnet/
+            │   └── SKILL.md
+            └── ...                   # one reference skill per ZeroFailed extension
 ```
 
 Each plugin entry in `marketplace.json` references its directory with an explicit relative path (e.g. `"source": "./plugins/zerofailed-tools"`).
 
 ## Using the marketplace
 
-Add the marketplace (once), then install plugins from it:
+Add the marketplace (once), then install plugins from it. The commands below are Claude Code's — for the Copilot CLI equivalents see [Works with GitHub Copilot CLI too](#works-with-github-copilot-cli-too):
 
 ```shell
 # From a local checkout (relative or absolute path)
@@ -32,16 +35,62 @@ Add the marketplace (once), then install plugins from it:
 
 # Install a plugin
 /plugin install zerofailed-tools@zerofailed
+
+# Apply the changes to the current session (otherwise they load on the next start)
+/reload-plugins
 ```
 
-Skills are namespaced by plugin: `author-zerofailed-extension` (which covers the module layout, task and property conventions, extension dependency metadata, how to hook into the standard build process, and the local test loop) is invoked as `/zerofailed-tools:author-zerofailed-extension`, or Claude invokes it automatically based on its `description` when you ask it to create or extend a ZeroFailed extension.
+To pick up new or updated skills later, refresh the marketplace, then reload plugins in the active session:
+
+```shell
+# Fetch the latest marketplace contents and update installed plugins from it
+/plugin marketplace update zerofailed
+
+# Apply the changes to the current session (otherwise they load on the next start)
+/reload-plugins
+```
+
+Because plugins in this marketplace omit a `version` field, every commit counts as a new version — `/plugin marketplace update` is all it takes to get the latest skills (see [Versioning](#versioning)).
 
 Non-interactive (CI, scripts):
 
 ```bash
 claude plugin marketplace add zerofailed/zerofailed-marketplace
 claude plugin install zerofailed-tools@zerofailed --scope project
+claude plugin marketplace update zerofailed   # refresh on subsequent runs
 ```
+
+## Using the skills
+
+Skills are namespaced by plugin, so each can be invoked explicitly as `/zerofailed-tools:<skill-name>` — but explicit invocation is the exception. Each skill's frontmatter `description` states when it applies, and the agent loads the matching skill automatically when your question matches it, so normally you just ask.
+
+`zerofailed-tools` contains two kinds of skill:
+
+**Authoring** — `author-zerofailed-extension` covers the module layout, task and property conventions, extension dependency metadata, how to hook into the standard build process, and the local test loop. It triggers when you ask your agent to create a new ZeroFailed extension or add tasks, properties or functions to an existing one.
+
+**Extension reference** — one skill per extension in [the ZeroFailed extension library](https://github.com/orgs/zerofailed/repositories). Each covers that extension's properties (defaults and `ZF_*` env-var overrides), its tasks and where each attaches in the build/deploy process, a working `.zf/config.ps1` snippet, and known gotchas. These trigger when you ask your agent to configure or troubleshoot a build or deployment that uses the extension:
+
+| Skill                         | Covers                                                                                                                                                                                                    |
+|-------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `zerofailed-devops-common`    | [ZeroFailed.DevOps.Common](https://github.com/zerofailed/ZeroFailed.DevOps.Common) — CI/CD-server detection, PowerShell module bootstrapping, `Enter-Build`/`Exit-Build` lifecycle hooks                  |
+| `zerofailed-build-common`     | [ZeroFailed.Build.Common](https://github.com/zerofailed/ZeroFailed.Build.Common) — the Init → Version → Build → Test → Analysis → Package → Publish process, GitVersion versioning, CI/CD status messages |
+| `zerofailed-build-dotnet`     | [ZeroFailed.Build.DotNet](https://github.com/zerofailed/ZeroFailed.Build.DotNet) — .NET compile, test with coverage, reporting, SBOM generation, NuGet packaging/publishing                               |
+| `zerofailed-build-powershell` | [ZeroFailed.Build.PowerShell](https://github.com/zerofailed/ZeroFailed.Build.PowerShell) — PlatyPS docs generation, Pester testing with coverage, PSRepository publishing                                 |
+| `zerofailed-build-python`     | [ZeroFailed.Build.Python](https://github.com/zerofailed/ZeroFailed.Build.Python) — Poetry/uv dependency management, flake8, pytest/behave, `.whl` build/publish                                           |
+| `zerofailed-build-github`     | [ZeroFailed.Build.GitHub](https://github.com/zerofailed/ZeroFailed.Build.GitHub) — GitHub Releases with attached build artifacts                                                                          |
+| `zerofailed-build-containers` | [ZeroFailed.Build.Containers](https://github.com/zerofailed/ZeroFailed.Build.Containers) — container image build/publish via Docker CLI or ACR Tasks                                                      |
+| `zerofailed-deploy-common`    | [ZeroFailed.Deploy.Common](https://github.com/zerofailed/ZeroFailed.Deploy.Common) — the Init → Provision → Deploy → Test process, environment configuration parsing                                      |
+| `zerofailed-deploy-azure`     | [ZeroFailed.Deploy.Azure](https://github.com/zerofailed/ZeroFailed.Deploy.Azure) — ARM/Bicep deployments, App Service ZIP deployment, temporary firewall access, App Insights annotations                 |
+| `zerofailed-deploy-powerbi`   | [ZeroFailed.Deploy.PowerBI](https://github.com/zerofailed/ZeroFailed.Deploy.PowerBI) — Power BI/Fabric shared cloud connections and permission sync from YAML                                             |
+| `zerofailed-deploy-fabric`    | [ZeroFailed.Deploy.Fabric](https://github.com/zerofailed/ZeroFailed.Deploy.Fabric) — Fabric workspace provisioning across DTAP environments (Git integration, identity, RBAC, pipelines)                  |
+
+Example prompts, and the skill each triggers:
+
+- "Why didn't my Pester tests run in this ZeroFailed build?" → `zerofailed-build-powershell`
+- "Add a Bicep deployment of our infra to the deploy process" → `zerofailed-deploy-azure`
+- "Which property turns off SBOM generation, and what's its env var?" → `zerofailed-build-dotnet`
+
+The reference skills complement — not replace — each extension's own `HELP.md`: they were written by verifying the generated docs against the extension source, and they record discrepancies and gotchas where the two disagree.
 
 ## Works with GitHub Copilot CLI too
 
@@ -85,7 +134,7 @@ Portability caveats for future plugins:
    ```
 
 2. Add components at the plugin root (not inside `.claude-plugin/`):
-   - `skills/<skill-name>/SKILL.md` — model-invoked skills; frontmatter `description` is required and tells Claude when to use it
+   - `skills/<skill-name>/SKILL.md` — model-invoked skills; frontmatter `description` is required and tells the agent when to use it
    - `commands/<name>.md` — flat slash-command style skills
    - `agents/<name>.md` — subagent definitions
    - `hooks/hooks.json` — hooks (use `${CLAUDE_PLUGIN_ROOT}` for script paths)
@@ -105,7 +154,7 @@ Portability caveats for future plugins:
 
 ## Adding a skill to an existing plugin
 
-Create `plugins/<plugin-name>/skills/<skill-name>/SKILL.md` — no manifest change is needed, since `skills/` is auto-discovered. The frontmatter needs `name` (matching the directory) and a `description` that states *when* to use the skill, because that is all Claude sees when deciding whether to invoke it:
+Create `plugins/<plugin-name>/skills/<skill-name>/SKILL.md` — no manifest change is needed, since `skills/` is auto-discovered. The frontmatter needs `name` (matching the directory) and a `description` that states *when* to use the skill, because that is all the agent sees when deciding whether to invoke it:
 
 ```markdown
 ---
