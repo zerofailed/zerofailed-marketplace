@@ -1,5 +1,5 @@
 ---
-name: zerofailed-build-python
+name: build-python
 description: Use when configuring or troubleshooting a ZeroFailed build that uses ZeroFailed.Build.Python — dependency management (Poetry or uv), linting, testing and building/publishing Python `.whl` packages. Covers its properties, tasks, and dependency chain.
 ---
 

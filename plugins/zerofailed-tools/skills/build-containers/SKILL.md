@@ -1,5 +1,5 @@
 ---
-name: zerofailed-build-containers
+name: build-containers
 description: Use when configuring or troubleshooting a ZeroFailed build that uses ZeroFailed.Build.Containers — container image build and publish (Docker CLI or ACR Tasks, to Docker Hub/any docker registry or Azure Container Registry). Covers its properties, tasks, and dependency chain.
 ---
 

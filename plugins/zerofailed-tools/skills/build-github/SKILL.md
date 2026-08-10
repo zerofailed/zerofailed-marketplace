@@ -1,5 +1,5 @@
 ---
-name: zerofailed-build-github
+name: build-github
 description: Use when configuring or troubleshooting a ZeroFailed build that uses ZeroFailed.Build.GitHub — creating/updating GitHub Releases and attaching build artifacts (including published NuGet packages) to them. Covers its properties, tasks, and dependency chain.
 ---
 

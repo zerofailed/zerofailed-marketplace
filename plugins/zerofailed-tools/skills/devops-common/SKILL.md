@@ -1,5 +1,5 @@
 ---
-name: zerofailed-devops-common
+name: devops-common
 description: Use when configuring or troubleshooting a ZeroFailed build that uses ZeroFailed.DevOps.Common — general-purpose CI/CD-server detection, PowerShell module bootstrapping, and the Enter-Build/Exit-Build lifecycle hooks (`Register-OnEnterAction`/`Register-OnExitAction`) that other extensions build on. Covers its properties, tasks, functions, and dependency chain.
 ---
 

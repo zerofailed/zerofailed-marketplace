@@ -1,5 +1,5 @@
 ---
-name: zerofailed-deploy-common
+name: deploy-common
 description: Use when configuring or troubleshooting a ZeroFailed deployment that uses ZeroFailed.Deploy.Common — the generic Init/Provision/Deploy/Test process that every other ZeroFailed.Deploy.* extension (Azure, PowerBI, Fabric) attaches its tasks to. Covers its properties, tasks, and the deploy process stage diagram.
 ---
 

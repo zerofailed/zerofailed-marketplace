@@ -1,5 +1,5 @@
 ---
-name: zerofailed-build-dotnet
+name: build-dotnet
 description: Use when configuring or troubleshooting a ZeroFailed build that uses ZeroFailed.Build.DotNet — .NET solution compile, test with code coverage, test/coverage reporting, SBOM generation (Covenant), NuGet/publish packaging, and NuGet publishing. Covers its full property set, tasks, and dependency chain.
 ---
 
@@ -83,7 +83,7 @@ general/shared ZeroFailed property, not DotNet-specific.
 
 | Property | Default | Env var | Effect |
 |---|---|---|---|
-| `covenantVersion` | `"0.24.0"` | | Version of the [Covenant](https://github.com/patriksvensson/covenant) .NET global tool to install. |
+| `covenantVersion` | `"0.24.0"` (per source) — `HELP.md` documents `"0.20.0"` | | Version of the [Covenant](https://github.com/patriksvensson/covenant) .NET global tool to install. **Discrepancy** — verify the effective default in your installed version before relying on it; see Gotchas. |
 | `CovenantIncludeSpdxReport` | `$true` (per HELP.md) — but source (`analysis.properties.ps1`) shows `$false` | `ZF_BUILD_DOTNET_COVENANT_INCLUDE_SPDX_REPORT` | When true, generates an SPDX-formatted SBOM. **Discrepancy** — verify the effective default in your installed version before relying on it; see Gotchas. |
 | `CovenantIncludeCycloneDxReport` | `$false` | `ZF_BUILD_DOTNET_COVENANT_INCLUDE_CYCLONEDX_REPORT` | When true, generates a CycloneDX-formatted SBOM. |
 | `CovenantMetadata` | derived from `git`/`gh` (`git_repo`, `git_branch`, `git_sha`) | | Additional metadata embedded in the Covenant report. Falls back to empty strings when `gh`/`git` aren't available or it's not a GitHub repo. |
@@ -196,6 +196,11 @@ full end-to-end example repo.
 - **`CovenantIncludeSpdxReport`'s documented default disagrees with source.** The generated `HELP.md`
   states `$true`; `module/tasks/analysis.properties.ps1` initialises it to `$false`. Confirm the behaviour
   for the version you've pinned rather than trusting either source blindly.
+- **`covenantVersion`'s documented default also disagrees with source.** The generated `HELP.md` states
+  `"0.20.0"`; `module/tasks/analysis.properties.ps1` initialises it to `"0.24.0"`. Same class of drift as
+  `CovenantIncludeSpdxReport` above — the source value is what's actually installed by the pinned extension
+  version. Both discrepancies are tracked upstream in
+  [zerofailed/ZeroFailed.Build.DotNet#28](https://github.com/zerofailed/ZeroFailed.Build.DotNet/issues/28).
 - **The generated `HELP.md`'s `ENV Override` column under-reports env vars** for Compile/Test/Package/
   Publish/Report/Analysis — most properties in those groups do have a `ZF_BUILD_DOTNET_*` binding even
   where the table leaves it blank. The table above was built from `module/tasks/*.properties.ps1` directly.

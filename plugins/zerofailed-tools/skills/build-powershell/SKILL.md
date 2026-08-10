@@ -1,5 +1,5 @@
 ---
-name: zerofailed-build-powershell
+name: build-powershell
 description: Use when configuring or troubleshooting a ZeroFailed build that uses ZeroFailed.Build.PowerShell — PlatyPS-based module documentation generation, Pester testing with code coverage, and publishing PowerShell modules to a PSRepository (e.g. PSGallery). Covers its properties, tasks, and dependency chain.
 ---
 

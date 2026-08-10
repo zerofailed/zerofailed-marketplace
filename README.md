@@ -15,7 +15,7 @@ zerofailed-marketplace/
         └── skills/
             ├── author-zerofailed-extension/
             │   └── SKILL.md          # One directory per skill
-            ├── zerofailed-build-dotnet/
+            ├── build-dotnet/
             │   └── SKILL.md
             └── ...                   # one reference skill per ZeroFailed extension
 ```
@@ -70,25 +70,25 @@ Skills are namespaced by plugin, so each can be invoked explicitly as `/zerofail
 
 **Extension reference** — one skill per extension in [the ZeroFailed extension library](https://github.com/orgs/zerofailed/repositories). Each covers that extension's properties (defaults and `ZF_*` env-var overrides), its tasks and where each attaches in the build/deploy process, a working `.zf/config.ps1` snippet, and known gotchas. These trigger when you ask your agent to configure or troubleshoot a build or deployment that uses the extension:
 
-| Skill                         | Covers                                                                                                                                                                                                    |
-|-------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `zerofailed-devops-common`    | [ZeroFailed.DevOps.Common](https://github.com/zerofailed/ZeroFailed.DevOps.Common) — CI/CD-server detection, PowerShell module bootstrapping, `Enter-Build`/`Exit-Build` lifecycle hooks                  |
-| `zerofailed-build-common`     | [ZeroFailed.Build.Common](https://github.com/zerofailed/ZeroFailed.Build.Common) — the Init → Version → Build → Test → Analysis → Package → Publish process, GitVersion versioning, CI/CD status messages |
-| `zerofailed-build-dotnet`     | [ZeroFailed.Build.DotNet](https://github.com/zerofailed/ZeroFailed.Build.DotNet) — .NET compile, test with coverage, reporting, SBOM generation, NuGet packaging/publishing                               |
-| `zerofailed-build-powershell` | [ZeroFailed.Build.PowerShell](https://github.com/zerofailed/ZeroFailed.Build.PowerShell) — PlatyPS docs generation, Pester testing with coverage, PSRepository publishing                                 |
-| `zerofailed-build-python`     | [ZeroFailed.Build.Python](https://github.com/zerofailed/ZeroFailed.Build.Python) — Poetry/uv dependency management, flake8, pytest/behave, `.whl` build/publish                                           |
-| `zerofailed-build-github`     | [ZeroFailed.Build.GitHub](https://github.com/zerofailed/ZeroFailed.Build.GitHub) — GitHub Releases with attached build artifacts                                                                          |
-| `zerofailed-build-containers` | [ZeroFailed.Build.Containers](https://github.com/zerofailed/ZeroFailed.Build.Containers) — container image build/publish via Docker CLI or ACR Tasks                                                      |
-| `zerofailed-deploy-common`    | [ZeroFailed.Deploy.Common](https://github.com/zerofailed/ZeroFailed.Deploy.Common) — the Init → Provision → Deploy → Test process, environment configuration parsing                                      |
-| `zerofailed-deploy-azure`     | [ZeroFailed.Deploy.Azure](https://github.com/zerofailed/ZeroFailed.Deploy.Azure) — ARM/Bicep deployments, App Service ZIP deployment, temporary firewall access, App Insights annotations                 |
-| `zerofailed-deploy-powerbi`   | [ZeroFailed.Deploy.PowerBI](https://github.com/zerofailed/ZeroFailed.Deploy.PowerBI) — Power BI/Fabric shared cloud connections and permission sync from YAML                                             |
-| `zerofailed-deploy-fabric`    | [ZeroFailed.Deploy.Fabric](https://github.com/zerofailed/ZeroFailed.Deploy.Fabric) — Fabric workspace provisioning across DTAP environments (Git integration, identity, RBAC, pipelines)                  |
+| Skill                | Covers                                                                                                                                                                                                    |
+|----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `devops-common`      | [ZeroFailed.DevOps.Common](https://github.com/zerofailed/ZeroFailed.DevOps.Common) — CI/CD-server detection, PowerShell module bootstrapping, `Enter-Build`/`Exit-Build` lifecycle hooks                  |
+| `build-common`       | [ZeroFailed.Build.Common](https://github.com/zerofailed/ZeroFailed.Build.Common) — the Init → Version → Build → Test → Analysis → Package → Publish process, GitVersion versioning, CI/CD status messages |
+| `build-dotnet`       | [ZeroFailed.Build.DotNet](https://github.com/zerofailed/ZeroFailed.Build.DotNet) — .NET compile, test with coverage, reporting, SBOM generation, NuGet packaging/publishing                               |
+| `build-powershell`   | [ZeroFailed.Build.PowerShell](https://github.com/zerofailed/ZeroFailed.Build.PowerShell) — PlatyPS docs generation, Pester testing with coverage, PSRepository publishing                                 |
+| `build-python`       | [ZeroFailed.Build.Python](https://github.com/zerofailed/ZeroFailed.Build.Python) — Poetry/uv dependency management, flake8, pytest/behave, `.whl` build/publish                                           |
+| `build-github`       | [ZeroFailed.Build.GitHub](https://github.com/zerofailed/ZeroFailed.Build.GitHub) — GitHub Releases with attached build artifacts                                                                          |
+| `build-containers`   | [ZeroFailed.Build.Containers](https://github.com/zerofailed/ZeroFailed.Build.Containers) — container image build/publish via Docker CLI or ACR Tasks                                                      |
+| `deploy-common`      | [ZeroFailed.Deploy.Common](https://github.com/zerofailed/ZeroFailed.Deploy.Common) — the Init → Provision → Deploy → Test process, environment configuration parsing                                      |
+| `deploy-azure`       | [ZeroFailed.Deploy.Azure](https://github.com/zerofailed/ZeroFailed.Deploy.Azure) — ARM/Bicep deployments, App Service ZIP deployment, temporary firewall access, App Insights annotations                 |
+| `deploy-powerbi`     | [ZeroFailed.Deploy.PowerBI](https://github.com/zerofailed/ZeroFailed.Deploy.PowerBI) — Power BI/Fabric shared cloud connections and permission sync from YAML                                             |
+| `deploy-fabric`      | [ZeroFailed.Deploy.Fabric](https://github.com/zerofailed/ZeroFailed.Deploy.Fabric) — Fabric workspace provisioning across DTAP environments (Git integration, identity, RBAC, pipelines)                  |
 
 Example prompts, and the skill each triggers:
 
-- "Why didn't my Pester tests run in this ZeroFailed build?" → `zerofailed-build-powershell`
-- "Add a Bicep deployment of our infra to the deploy process" → `zerofailed-deploy-azure`
-- "Which property turns off SBOM generation, and what's its env var?" → `zerofailed-build-dotnet`
+- "Why didn't my Pester tests run in this ZeroFailed build?" → `build-powershell`
+- "Add a Bicep deployment of our infra to the deploy process" → `deploy-azure`
+- "Which property turns off SBOM generation, and what's its env var?" → `build-dotnet`
 
 The reference skills complement — not replace — each extension's own `HELP.md`: they were written by verifying the generated docs against the extension source, and they record discrepancies and gotchas where the two disagree.
 
@@ -175,6 +175,7 @@ Plugin `version` is omitted deliberately: without it, every git commit counts as
 - Only `plugin.json` lives in a plugin's `.claude-plugin/` folder; everything else goes at the plugin root.
 - Marketplace and plugin names must be kebab-case with no spaces.
 - After installing or updating in an active session, run `/reload-plugins`.
+- The extension-reference skills reflect the upstream `ZeroFailed.*` extension source as of when they were written and aren't pinned to a specific release tag — re-verify property defaults and tasks against upstream source if the extension has since cut a new version.
 
 ## Related
 

@@ -1,5 +1,5 @@
 ---
-name: zerofailed-deploy-fabric
+name: deploy-fabric
 description: Use when configuring or troubleshooting a ZeroFailed deployment that uses ZeroFailed.Deploy.Fabric — provisioning Microsoft Fabric workspaces across DTAP environments (naming, Git integration, Workspace Identity, monitoring, RBAC role assignments, deployment pipelines). Covers its topology config schema, functions, tasks, and dependency chain.
 ---
 

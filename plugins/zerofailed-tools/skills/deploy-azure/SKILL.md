@@ -1,5 +1,5 @@
 ---
-name: zerofailed-deploy-azure
+name: deploy-azure
 description: Use when configuring or troubleshooting a ZeroFailed deployment that uses ZeroFailed.Deploy.Azure — Azure ARM/Bicep deployments, App Service ZIP deployment, temporary firewall access, App Insights release annotations and Azure connection setup. Covers its properties, tasks, and dependency chain.
 ---
 

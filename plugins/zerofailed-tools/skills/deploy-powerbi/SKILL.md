@@ -1,5 +1,5 @@
 ---
-name: zerofailed-deploy-powerbi
+name: deploy-powerbi
 description: Use when configuring or troubleshooting a ZeroFailed deployment that uses ZeroFailed.Deploy.PowerBI — declarative Power BI/Fabric shared cloud connections and their owner/user/reshare permission synchronization via YAML config. Covers its properties, tasks, YAML configuration schema, and dependency chain.
 ---
 

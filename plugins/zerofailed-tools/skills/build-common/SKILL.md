@@ -1,5 +1,5 @@
 ---
-name: zerofailed-build-common
+name: build-common
 description: Use when configuring or troubleshooting a ZeroFailed build that uses ZeroFailed.Build.Common — the root Init/Version/Build/Test/Analysis/Package/Publish process (`build.process.ps1`) that every technology-specific ZeroFailed.Build.* extension attaches its tasks to, plus GitVersion-based versioning and CI/CD build-server integration. Covers its properties, tasks, and the pipeline stage diagram.
 ---
 
