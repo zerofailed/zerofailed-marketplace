@@ -64,7 +64,7 @@ claude plugin marketplace update zerofailed   # refresh on subsequent runs
 
 Skills are namespaced by plugin, so each can be invoked explicitly as `/zerofailed-tools:<skill-name>` — but explicit invocation is the exception. Each skill's frontmatter `description` states when it applies, and the agent loads the matching skill automatically when your question matches it, so normally you just ask.
 
-`zerofailed-tools` contains two kinds of skill:
+`zerofailed-tools` contains three kinds of skill:
 
 **Authoring** — `author-zerofailed-extension` covers the module layout, task and property conventions, extension dependency metadata, how to hook into the standard build process, and the local test loop. It triggers when you ask your agent to create a new ZeroFailed extension or add tasks, properties or functions to an existing one.
 
@@ -84,13 +84,23 @@ Skills are namespaced by plugin, so each can be invoked explicitly as `/zerofail
 | `deploy-powerbi`     | [ZeroFailed.Deploy.PowerBI](https://github.com/zerofailed/ZeroFailed.Deploy.PowerBI) — Power BI/Fabric shared cloud connections and permission sync from YAML                                             |
 | `deploy-fabric`      | [ZeroFailed.Deploy.Fabric](https://github.com/zerofailed/ZeroFailed.Deploy.Fabric) — Fabric workspace provisioning across DTAP environments (Git integration, identity, RBAC, pipelines)                  |
 
+The reference skills complement — not replace — each extension's own `HELP.md`: they were written by verifying the generated docs against the extension source, and they record discrepancies and gotchas where the two disagree.
+
+**CI/CD workflow** — `cicd-build-gha` covers the companion
+[endjin/Endjin.RecommendedPractices.GitHubActions](https://github.com/endjin/Endjin.RecommendedPractices.GitHubActions)
+repo: the reusable GitHub Actions workflows and composite actions that invoke `build.ps1` in CI. It triggers
+when you ask your agent to set up, extend, or troubleshoot a GitHub Actions workflow for a ZeroFailed
+build/deploy — choosing between the composite action and the (matrix) reusable workflows, passing env
+vars/secrets across job boundaries, and wiring up release/dependabot automation.
+
 Example prompts, and the skill each triggers:
 
 - "Why didn't my Pester tests run in this ZeroFailed build?" → `build-powershell`
 - "Add a Bicep deployment of our infra to the deploy process" → `deploy-azure`
 - "Which property turns off SBOM generation, and what's its env var?" → `build-dotnet`
+- "Add a GitHub Actions build workflow that publishes to NuGet on tag" → `cicd-build-gha`
 
-The reference skills complement — not replace — each extension's own `HELP.md`: they were written by verifying the generated docs against the extension source, and they record discrepancies and gotchas where the two disagree.
+The ZF extension reference skills complement — not replace — each extension's own `HELP.md`: they were written by verifying the generated docs against the extension source, and they record discrepancies and gotchas where the two disagree.
 
 ## Works with GitHub Copilot CLI too
 
