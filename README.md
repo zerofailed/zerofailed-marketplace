@@ -86,7 +86,7 @@ Skills are namespaced by plugin, so each can be invoked explicitly as `/zerofail
 
 The reference skills complement — not replace — each extension's own `HELP.md`: they were written by verifying the generated docs against the extension source, and they record discrepancies and gotchas where the two disagree.
 
-**CI/CD workflow** — `cicd-build-gha` covers the companion
+**CI/CD workflow** — `cicd-gha` covers the companion
 [endjin/Endjin.RecommendedPractices.GitHubActions](https://github.com/endjin/Endjin.RecommendedPractices.GitHubActions)
 repo: the reusable GitHub Actions workflows and composite actions that invoke `build.ps1` in CI. It triggers
 when you ask your agent to set up, extend, or troubleshoot a GitHub Actions workflow for a ZeroFailed
@@ -98,7 +98,7 @@ Example prompts, and the skill each triggers:
 - "Why didn't my Pester tests run in this ZeroFailed build?" → `build-powershell`
 - "Add a Bicep deployment of our infra to the deploy process" → `deploy-azure`
 - "Which property turns off SBOM generation, and what's its env var?" → `build-dotnet`
-- "Add a GitHub Actions build workflow that publishes to NuGet on tag" → `cicd-build-gha`
+- "Add a GitHub Actions build workflow that publishes to NuGet on tag" → `cicd-gha`
 
 The ZF extension reference skills complement — not replace — each extension's own `HELP.md`: they were written by verifying the generated docs against the extension source, and they record discrepancies and gotchas where the two disagree.
 
