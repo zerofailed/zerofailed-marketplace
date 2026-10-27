@@ -91,14 +91,17 @@ $PowerShellModulesToPublish = @(
 | `SourceLocation` | no | When set, the repository is registered (as `Trusted`) if it isn't already registered on the agent. |
 | `PublishLocation` | no | Publish URI used at registration. Defaults to `SourceLocation`. |
 | `Credential` | no | `PSCredential` used both to register the repository and to publish to it. |
+| `BlockPreReleaseVersions` | no | When `$true`, pre-release versions are not published to this repository, and it isn't registered for them either. Defaults to `$false`. Typically set on PSGallery so that only stable versions reach it. |
 
-Any value can be a scriptblock. Scriptblocks are evaluated (via `Resolve-Value`) when the publish task runs, so secrets are read only when they're needed:
+Any value can be a scriptblock. Scriptblocks are evaluated (via `Resolve-Value`) when the publish task runs, so secrets are read only when they're needed. This example publishes every version to GitHub Packages and
+only stable versions to PSGallery:
 
 ```powershell
 $PowerShellRepositories = @(
     @{
         Name = 'PSGallery'
         ApiKey = { $PSRepositoryApiKey }
+        BlockPreReleaseVersions = $true
     }
     @{
         Name = 'GitHubPackages'
@@ -129,7 +132,7 @@ permission — see `cicd-gha`.
 | `RunPSMarkdownDocsLinting` | `-After GeneratePSMarkdownDocs`, `-If {!$SkipGeneratePSMarkdownDocs}` | Lints the generated markdown for leftover placeholder text (fails the build if `PSMarkdownDocsRequireLinting`, else warns). |
 | `InstallPester` | dependency of `RunPesterTests` | Installs the pinned `PesterVersion`. |
 | `RunPesterTests` | `-After TestCore`, `-If {!$SkipPesterTests -and $PesterTestsDir}` | Runs Pester using the v5 configuration object — filtering, code coverage, and output formats all apply. **No-ops if `PesterTestsDir` isn't set.** |
-| `PublishPowerShellModules` | `-After PublishCore`, `-If {!$SkipPowerShellPublish}` | Registers any missing repositories that have a `SourceLocation`. Then, for each module in `PowerShellModulesToPublish`, updates the manifest once and publishes it to every entry in `PowerShellRepositories` (or to `PowerShellRepository` when that list is empty). |
+| `PublishPowerShellModules` | `-After PublishCore`, `-If {!$SkipPowerShellPublish}` | Drops repositories with `BlockPreReleaseVersions` when the version is a pre-release (and stops early if none remain). Registers any missing repositories that have a `SourceLocation`. Then, for each module in `PowerShellModulesToPublish`, updates the manifest once and publishes it to every entry in `PowerShellRepositories` (or to `PowerShellRepository` when that list is empty). |
 
 ## Usage
 
@@ -183,6 +186,9 @@ task . FullBuild
   `EnablePowerShellModuleForcePublish` (or a new version) for those repositories.
 - **An unregistered repository needs a `SourceLocation`.** Without one, the publish task throws instead of
   registering it. `PSGallery` is registered by default, so its entry needs only `Name` and `ApiKey`.
+- **"Pre-release" means GitVersion's `NuGetPreReleaseTag` is not empty** — the same test the task uses for
+  `Publish-Module -AllowPrerelease`. `BlockPreReleaseVersions` isn't available in the single-repository
+  fallback; to use it, list the repository in `PowerShellRepositories`.
 - **Setting `PowerShellRepositories` overrides `PowerShellRepository`.** Once the list is non-empty, the
   single-repository properties are ignored. To keep publishing to PSGallery, add an entry for it
   (e.g. `ApiKey = { $PSRepositoryApiKey }`).
