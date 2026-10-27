@@ -84,6 +84,15 @@ inside the reusable workflows' own `env:` blocks (`BUILDVAR_AnalysisOutputStorag
 them is marked `# TODO: Add equivalent env var overrides for use with ZeroFailed` in the source. You don't
 set those yourself; set `ZF_*` overrides for whatever your `.zf/config.ps1` actually reads.
 
+**Recommended — freeze the extension versions in CI.** ZeroFailed records the exact commit/version of every
+extension (dependencies included) in the committed `.zf/extensions.lock.json`, but only installs from it in
+`Frozen` lock mode. In the default `Write` mode a fresh CI checkout resolves `GitRef = "main"` (and
+`MinimumVersion`) afresh every run. Add `ZF_EXTENSIONS_LOCK_MODE: Frozen` to `environmentVariablesYaml` —
+for the multi-job reusable workflows, to every phase's env that runs `build.ps1`, since each phase is a
+separate job that registers the extensions again. A `Frozen` run fails if the lock file is missing or the
+configured extensions differ from it, so commit the lock file updated by a local `Write`-mode run whenever
+`.zf/config.ps1`'s extension list changes.
+
 ## Reference
 
 - **`run-build-process` composite action** — inputs, outputs, and a full working example: see
@@ -123,9 +132,8 @@ requires `contents: write`, `issues: write`, `pull-requests: write`.
 ## Gotchas
 
 - **Reusable workflows/actions are referenced at `@main`** throughout every upstream example — there's no
-  version pinning at this layer. Treat it as a moving target the same way `author-zerofailed-extension`
-  warns about `GitRef = "main"` ZeroFailed extension installs going stale; fork and pin a SHA if
-  reproducibility matters more than always getting the latest fixes.
+  version pinning at this layer, and the ZeroFailed extension lock file does not cover it. Treat it as a
+  moving target; fork and pin a SHA if reproducibility matters more than always getting the latest fixes.
 - **`workflow_dispatch` inputs always arrive as strings.** Compare with `== 'true'`
   (`github.event.inputs.forcePublish == 'true'`), never rely on truthiness — the `type: boolean` in the
   input declaration only affects the trigger-UI checkbox, not the runtime value's type.
