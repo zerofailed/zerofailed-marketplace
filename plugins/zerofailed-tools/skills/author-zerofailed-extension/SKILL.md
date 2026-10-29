@@ -130,6 +130,11 @@ version (below `1.0.0`, the first non-zero part sets the limit, so `0.3.1` accep
 dependency, releases are tags named after a full semantic version (`1.4.2` or `v1.4.2`); other tags such as
 `v1` are ignored. Pre-release versions are only considered with `PreRelease = $true`.
 
+"Release" here means the git tag only — ZeroFailed lists tags with `git ls-remote` and never looks at
+GitHub Releases (so it works the same on any git host). A pushed tag with no GitHub Release is used; a
+draft GitHub Release whose tag does not exist yet is not; and the GitHub "pre-release" checkbox is ignored
+— a version is a pre-release only if the tag name has a pre-release label (e.g. `1.5.0-beta.1`).
+
 ```powershell
 @{
     Name = "ZeroFailed.Build.Common"
