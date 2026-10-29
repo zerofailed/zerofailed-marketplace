@@ -22,6 +22,7 @@ deployment at `Provision`, and App Service/App Insights/firewall-teardown work a
 
 External prerequisites (must already be installed — not auto-installed by this extension):
 
+- PowerShell 7.4 or later
 - [Azure PowerShell modules](https://www.powershellgallery.com/packages/Az/) (`Az.*`)
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest)
 
