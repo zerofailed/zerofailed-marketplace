@@ -1,6 +1,6 @@
 ---
 name: deploy-azure
-description: Use when configuring or troubleshooting a ZeroFailed deployment that uses ZeroFailed.Deploy.Azure — Azure ARM/Bicep deployments, App Service ZIP deployment, temporary firewall access, App Insights release annotations and Azure connection setup. Covers its properties, tasks, and dependency chain.
+description: Use when configuring or troubleshooting a ZeroFailed deployment that uses ZeroFailed.Deploy.Azure — Azure ARM/Bicep deployments, App Service and Function App ZIP deployment (including the Flex Consumption plan), temporary firewall access, App Insights release annotations and Azure connection setup. Covers its properties, tasks, and dependency chain.
 ---
 
 # ZeroFailed.Deploy.Azure
@@ -72,6 +72,7 @@ $RequiredArmDeployments = @(
 | `AppServiceAppsToDeploy` | `@()` | — | ZIP packages to deploy to Azure App Service. See [AppServiceAppsToDeploy](#appserviceappstodeploy) below. |
 | `SkipAppServiceAppDeployment` | `$false` | `ZF_DEPLOY_SKIP_APP_SERVICE_DEPLOYMENT` | When true, any configured App Service deployments are skipped. |
 | `AppServiceRequiresTemporaryNetworkAccess` | `$false` | `ZF_DEPLOY_APP_SERVICE_TEMP_NETWORK_ACCESS` | When true, a temporary App Service firewall rule is created to give the deployment process access. |
+| `AppServiceFlexDeploymentTimeoutSeconds` | `600` | `ZF_DEPLOY_APP_SERVICE_FLEX_DEPLOYMENT_TIMEOUT_SECONDS` | The maximum time, in seconds, to wait for a deployment to a Function App on the Flex Consumption plan to finish. |
 
 `AppServiceAppsToDeploy`:
 
@@ -87,8 +88,34 @@ $AppServiceAppsToDeploy = @(
         resourceGroupName = { $deploymentConfig.resourceGroupName }
         zipPackagePath = $backEndZipPackagePath
     }
+    @{
+        appServiceName = { $deploymentConfig.pythonFunctionAppName }
+        resourceGroupName = { $deploymentConfig.resourceGroupName }
+        zipPackagePath = $pythonFunctionZipPackagePath
+        remoteBuild = $true      # Optional. Used only for Function Apps on the Flex Consumption plan.
+    }
+    # An entry can also be a scriptblock that returns the whole configuration object
+    {
+        @{
+            appServiceName = $deploymentConfig.apiAppServiceName
+            resourceGroupName = $deploymentConfig.resourceGroupName
+            zipPackagePath = $apiZipPackagePath
+        }
+    }
 )
 ```
+
+The task checks the plan of each app. For a Function App on the Flex Consumption plan, it uses
+`Publish-FlexConsumptionFunctionApp`, because `Publish-AzWebApp` does not support this plan. For all other apps,
+it uses `Publish-AzWebApp`.
+
+Set `remoteBuild` to `$true` when the platform must build the package after the upload. A Python app needs this
+to install its packages. Do not set it for packages that are ready to run, such as .NET apps. The task
+ignores `remoteBuild` for apps that are not on the Flex Consumption plan, and logs a warning.
+
+The task resolves a scriptblock entry when it deploys that app, after `readConfiguration` runs. Use a
+scriptblock entry when the whole object depends on `$deploymentConfig`. The values inside the object can also be
+scriptblocks.
 
 ### Monitoring
 
@@ -131,7 +158,7 @@ Supported `ResourceType` values: `AiSearch`, `KeyVault`, `SqlServer`, `StorageAc
 | `ensureBicepVersion` | Not stage-attached — runs as a job dependency of `deployArmTemplates` | Checks a suitable Bicep CLI version is available, installing via Azure CLI if missing/incorrect. Only actually checks when a `.bicep` template is in `RequiredArmDeployments` or `ForceBicepVersionCheck` is set. |
 | `deployArmTemplates` | `-After ProvisionCore`, depends on `readConfiguration`, `connectAzure`, `ensureBicepVersion` | Runs the configured ARM/Bicep deployments; populates `$ZF_ArmDeploymentOutputs`. |
 | `enableTemporaryNetworkAccess` | `-Before PreDeploy` | Applies temporary network access rules to the configured Azure resources. |
-| `deployAppServiceZipPackages` | `-After DeployCore`, depends on `readConfiguration` | Deploys the configured Azure App Service ZIP packages. |
+| `deployAppServiceZipPackages` | `-After DeployCore`, depends on `readConfiguration` | Deploys the configured ZIP packages to Azure App Service and Function Apps, including Function Apps on the Flex Consumption plan. |
 | `createAppInsightsReleaseAnnotation` | `-After DeployCore`, `-Before PostDeploy` | Creates an App Insights release annotation. Also gated on `$IsAzureDevOpsRelease` (set by the DevOps.Common build-server detection), so it is inert outside an Azure DevOps release pipeline. |
 
 There is no `removeTemporaryNetworkAccess` *task* — cleanup of temporary network access rules is a plain
@@ -147,6 +174,8 @@ Exported functions ([full reference](https://github.com/zerofailed/ZeroFailed.De
 | `Assert-TemporaryNetworkAccessRules` | Manages temporary firewall access rules for Azure resources. |
 | `Assert-BicepCliVersionInPath` | Checks that the specified version of the Bicep CLI is available via `PATH`. |
 | `Convert-UnicodeToEscapeHex` | Converts Unicode characters in a JSON string to escaped hex, for passing Unicode strings to REST APIs. |
+| `Publish-FlexConsumptionFunctionApp` | Deploys a ZIP package to a Function App on the Flex Consumption plan, and waits for the deployment to finish. |
+| `Test-FlexConsumptionFunctionApp` | Checks whether a Function App runs on the Flex Consumption plan. |
 
 ## Usage
 
@@ -206,3 +235,12 @@ task . FullDeployment
   `$deploymentConfig` by name-matching convention; forgetting to list non-template config keys here can
   cause a deployment to fail parameter validation, or silently pass through a value that should have used
   the template's own default.
+- **Flex Consumption deployments can fail on a timeout.** The task waits up to
+  `AppServiceFlexDeploymentTimeoutSeconds` (600 by default) for each deployment to finish. A remote build can
+  take longer, for example for a Python app that installs many packages. If the error says that the deployment
+  did not finish within the timeout, increase this value. Each status request also stops when the timeout ends,
+  so a status endpoint that does not respond cannot block the deployment indefinitely.
+- **Flex Consumption deployments retry HTTP 403 for 60 seconds.** Changes to the access restrictions of the
+  SCM site can take more than 30 seconds to apply, for example the temporary rule from
+  `AppServiceRequiresTemporaryNetworkAccess`. If the SCM site still blocks the requests after 60 seconds, the
+  deployment fails. Check that the access restrictions of the SCM site allow the deployment machine.
