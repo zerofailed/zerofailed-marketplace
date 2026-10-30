@@ -28,6 +28,8 @@ of every build.
 |---|---|---|---|
 | `OnEnterActions` | `[List[scriptblock]]::new()` | | [Extensibility point] Scriptblocks run as part of InvokeBuild's `Enter-Build`, at the very start of the build. Register via `Register-OnEnterAction`, don't append directly. |
 | `OnExitActions` | `[List[scriptblock]]::new()` | | [Extensibility point] Scriptblocks run as part of InvokeBuild's `Exit-Build`, at the very end of the build (success or failure). Register via `Register-OnExitAction`. |
+| `PowerShellModuleInstallRetryCount` | `5` | `ZF_PS_MODULE_INSTALL_RETRY_COUNT` | Number of times `setupModules` retries installing `RequiredPowerShellModules`, to ride out transient PowerShell Gallery failures. |
+| `PowerShellModuleInstallRetryDelay` | `5` | `ZF_PS_MODULE_INSTALL_RETRY_DELAY` | Delay, in seconds, between `setupModules` install attempts. |
 | `RequiredPowerShellModules` | `@{}` | `ZF_REQUIRED_PS_MODULES` | Hashtable of PowerShell modules to install/import before the build proper starts. Keys are module names; values are hashtables with `version`/`repository`. |
 | `SkipEnsureGitHubCli` | `$true` | `ZF_SKIP_ENSURE_GITHUB_CLI` | When true (the default), skips checking/installing the GitHub CLI. |
 | `SkipZeroFailedModuleVersionCheck` | `$false` | `ZF_SKIP_ZEROFAILED_MODULE_VERSION_CHECK` | When true, skips checking for a newer version of the core `ZeroFailed` module. |
@@ -48,7 +50,7 @@ of every build.
 |---|---|---|
 | `DetectCICDServer` | `-After InitCore`, `-If {!$SkipDetectCICDServer}` | Detects which CI/CD platform (if any) is running the build and sets the `Is*` read-only properties. |
 | `EnsureGitHubCli` | `-After InitCore`, `-If {!$SkipEnsureGitHubCli}` | Checks whether `gh` is installed and installs it if not. Disabled by default. |
-| `setupModules` | `-After InitCore`, `-If {$RequiredPowerShellModules -ne @{}}` | Installs and imports the PowerShell modules listed in `RequiredPowerShellModules`. Trusts the PowerShell repository by default. |
+| `setupModules` | `-After InitCore`, `-If {$RequiredPowerShellModules -ne @{}}` | Installs and imports the PowerShell modules listed in `RequiredPowerShellModules`, retrying the install (via `Invoke-CommandWithRetry`) per `PowerShellModuleInstallRetryCount`/`PowerShellModuleInstallRetryDelay`. Already-installed modules are skipped, so a retry only installs what's still missing. Trusts the PowerShell repository by default. |
 
 ## Functions
 
