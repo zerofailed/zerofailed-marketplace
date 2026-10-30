@@ -239,8 +239,8 @@ task . FullDeployment
 - **Flex Consumption deployments can fail on a timeout.** The task waits up to
   `AppServiceFlexDeploymentTimeoutSeconds` (600 by default) for each deployment to finish. A remote build can
   take longer, for example for a Python app that installs many packages. If the error says that the deployment
-  did not finish within the timeout, increase this value. Each status request also stops when the timeout ends,
-  so a status endpoint that does not respond cannot block the deployment indefinitely.
+  did not finish within the timeout, increase this value. Status requests limit the header wait and each body
+  read to the remaining time, but a slow response can still finish after the deployment timeout.
 - **Flex Consumption deployments retry HTTP 403 for 60 seconds.** Changes to the access restrictions of the
   SCM site can take more than 30 seconds to apply, for example the temporary rule from
   `AppServiceRequiresTemporaryNetworkAccess`. If the SCM site still blocks the requests after 60 seconds, the
