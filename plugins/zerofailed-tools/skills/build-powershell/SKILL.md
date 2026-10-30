@@ -1,13 +1,13 @@
 ---
 name: build-powershell
-description: Use when configuring or troubleshooting a ZeroFailed build that uses ZeroFailed.Build.PowerShell — PlatyPS-based module documentation generation, Pester testing with code coverage, and publishing PowerShell modules to a PSRepository (e.g. PSGallery). Covers its properties, tasks, and dependency chain.
+description: Use when configuring or troubleshooting a ZeroFailed build that uses ZeroFailed.Build.PowerShell — PlatyPS-based module documentation generation, Pester testing with code coverage, and publishing PowerShell modules to one or more PSRepositories (e.g. PSGallery, GitHub Packages). Covers its properties, tasks, and dependency chain.
 ---
 
 # ZeroFailed.Build.PowerShell
 
 [ZeroFailed.Build.PowerShell](https://github.com/zerofailed/ZeroFailed.Build.PowerShell) supplies the build
 work for PowerShell module projects: PlatyPS-generated markdown documentation (with linting), Pester-based
-testing with code coverage, and publishing to a PowerShell repository (PSGallery by default). Like
+testing with code coverage, and publishing to one or more PowerShell repositories (PSGallery by default). Like
 `ZeroFailed.Build.DotNet`, it attaches to the generic Init → Version → Build → Test → Analysis → Package →
 Publish pipeline defined by [ZeroFailed.Build.Common](https://github.com/zerofailed/ZeroFailed.Build.Common)
 rather than defining its own process. This is the extension ZeroFailed extensions themselves use to build
@@ -65,8 +65,9 @@ and publish — see `author-zerofailed-extension`'s "The extension's own build" 
 | `PowerShellModulesToPublish` | `@()` | | Modules to publish to a PowerShell repository — see structure below. |
 | `SkipPowerShellPublish` | `$false` | | When true, skips publishing all configured modules. |
 | `EnablePowerShellModuleForcePublish` | `$false` | | When true, republishes even if the version already exists in the target repository. |
-| `PowerShellRepository` | `"PSGallery"` | | Name of the PowerShell repository to publish to. |
-| `PSRepositoryApiKey` | `""` | `ZF_BUILD_PS_REPOSITORY_APIKEY` | API key used when publishing. |
+| `PowerShellRepositories` | `@()` | | Repositories to publish every module to (e.g. PSGallery and GitHub Packages) — see structure below. When empty, falls back to `PowerShellRepository` + `PSRepositoryApiKey`. |
+| `PowerShellRepository` | `"PSGallery"` | | Name of the single repository to publish to. Only used when `PowerShellRepositories` is empty. |
+| `PSRepositoryApiKey` | `""` | `ZF_BUILD_PS_REPOSITORY_APIKEY` | API key for that single repository. Only used when `PowerShellRepositories` is empty. |
 
 `PowerShellModulesToPublish` entries:
 
@@ -81,6 +82,44 @@ $PowerShellModulesToPublish = @(
 )
 ```
 
+`PowerShellRepositories` entries:
+
+| Key | Required | Effect |
+|---|---|---|
+| `Name` | yes | Name of the PowerShell repository. |
+| `ApiKey` | no | API key passed to `Publish-Module -NuGetApiKey`. |
+| `SourceLocation` | no | When set, the repository is registered (as `Trusted`) if it isn't already registered on the agent. |
+| `PublishLocation` | no | Publish URI used at registration. Defaults to `SourceLocation`. |
+| `Credential` | no | `PSCredential` used both to register the repository and to publish to it. |
+| `BlockPreReleaseVersions` | no | When `$true`, pre-release versions are not published to this repository, and it isn't registered for them either. Defaults to `$false`. Typically set on PSGallery so that only stable versions reach it. |
+
+Any value can be a scriptblock. Scriptblocks are evaluated (via `Resolve-Value`) when the publish task runs, so secrets are read only when they're needed. This example publishes every version to GitHub Packages and
+only stable versions to PSGallery:
+
+```powershell
+$PowerShellRepositories = @(
+    @{
+        Name = 'PSGallery'
+        ApiKey = { $PSRepositoryApiKey }
+        BlockPreReleaseVersions = $true
+    }
+    @{
+        Name = 'GitHubPackages'
+        SourceLocation = 'https://nuget.pkg.github.com/<owner>/index.json'
+        ApiKey = { $env:ZF_BUILD_GITHUB_PACKAGES_TOKEN }
+        Credential = {
+            if ($env:ZF_BUILD_GITHUB_PACKAGES_TOKEN) {
+                [pscredential]::new('github-actions', (ConvertTo-SecureString $env:ZF_BUILD_GITHUB_PACKAGES_TOKEN -AsPlainText -Force))
+            }
+        }
+    }
+)
+```
+
+In GitHub Actions, pass the token through the secrets YAML (for example
+`ZF_BUILD_GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}`) and give the workflow `packages: write`
+permission — see `cicd-gha`.
+
 ## Tasks
 
 | Task | Hook | What it does |
@@ -93,7 +132,7 @@ $PowerShellModulesToPublish = @(
 | `RunPSMarkdownDocsLinting` | `-After GeneratePSMarkdownDocs`, `-If {!$SkipGeneratePSMarkdownDocs}` | Lints the generated markdown for leftover placeholder text (fails the build if `PSMarkdownDocsRequireLinting`, else warns). |
 | `InstallPester` | dependency of `RunPesterTests` | Installs the pinned `PesterVersion`. |
 | `RunPesterTests` | `-After TestCore`, `-If {!$SkipPesterTests -and $PesterTestsDir}` | Runs Pester using the v5 configuration object — filtering, code coverage, and output formats all apply. **No-ops if `PesterTestsDir` isn't set.** |
-| `PublishPowerShellModules` | `-After PublishCore`, `-If {!$SkipPowerShellPublish}` | Publishes each module in `PowerShellModulesToPublish` to `PowerShellRepository`. |
+| `PublishPowerShellModules` | `-After PublishCore`, `-If {!$SkipPowerShellPublish}` | Drops repositories with `BlockPreReleaseVersions` when the version is a pre-release (and stops early if none remain). Registers any missing repositories that have a `SourceLocation`. Then, for each module in `PowerShellModulesToPublish`, updates the manifest once and publishes it to every entry in `PowerShellRepositories` (or to `PowerShellRepository` when that list is empty). |
 
 ## Usage
 
@@ -142,3 +181,14 @@ task . FullBuild
   module; `PSMarkdownDocsFlattenOutputPath` works around that via a move-before/move-after pair
   (`MoveMarkdownFilesBeforePlatyPS` / `ReturnMarkdownFilesAfterPlatyPS`) rather than a PlatyPS option —
   don't expect a single flag on the PlatyPS call itself.
+- **Multi-repository publishing stops at the first failure.** Modules are published to the repositories in
+  list order. If a later repository fails, the version is already on the earlier ones, so a re-run needs
+  `EnablePowerShellModuleForcePublish` (or a new version) for those repositories.
+- **An unregistered repository needs a `SourceLocation`.** Without one, the publish task throws instead of
+  registering it. `PSGallery` is registered by default, so its entry needs only `Name` and `ApiKey`.
+- **"Pre-release" means GitVersion's `NuGetPreReleaseTag` is not empty** — the same test the task uses for
+  `Publish-Module -AllowPrerelease`. `BlockPreReleaseVersions` isn't available in the single-repository
+  fallback; to use it, list the repository in `PowerShellRepositories`.
+- **Setting `PowerShellRepositories` overrides `PowerShellRepository`.** Once the list is non-empty, the
+  single-repository properties are ignored. To keep publishing to PSGallery, add an entry for it
+  (e.g. `ApiKey = { $PSRepositoryApiKey }`).
