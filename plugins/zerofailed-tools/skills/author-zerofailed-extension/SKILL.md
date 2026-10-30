@@ -122,6 +122,40 @@ manifest and delete the file. Do not create new ones.
 
 A dependency entry that also supplies the process adds `Process = "tasks/build.process.ps1"`.
 
+Each dependency entry takes the same keys as a `$zerofailedExtensions` entry: a bare name string
+(latest from the default PowerShell repository), `Version` (exact PowerShell-repository version),
+`GitRepository` + `GitRef`, or `MinimumVersion`. Prefer `MinimumVersion` when the dependency publishes
+releases: it installs the newest release from that version up to, but not including, the next major
+version (below `1.0.0`, the first non-zero part sets the limit, so `0.3.1` accepts `<0.4.0`). For a git
+dependency, releases are tags named after a full semantic version (`1.4.2` or `v1.4.2`); other tags such as
+`v1` are ignored. Pre-release versions are only considered with `PreRelease = $true`.
+
+"Release" here means the git tag only — ZeroFailed lists tags with `git ls-remote` and never looks at
+GitHub Releases (so it works the same on any git host). A pushed tag with no GitHub Release is used; a
+draft GitHub Release whose tag does not exist yet is not; and the GitHub "pre-release" checkbox is ignored
+— a version is a pre-release only if the tag name has a pre-release label (e.g. `1.5.0-beta.1`).
+
+```powershell
+@{
+    Name = "ZeroFailed.Build.Common"
+    GitRepository = "https://github.com/zerofailed/ZeroFailed.Build.Common"
+    MinimumVersion = "1.4.0"             # in place of GitRef — not alongside it
+}
+```
+
+When several extensions require the same extension, ZeroFailed installs one version of it:
+
+- If the consumer's `.zf/config.ps1` lists it, that version wins, with a warning if it is outside a range
+  another extension requires.
+- Otherwise, if any of the requests uses `MinimumVersion`, the newest version in **every** range wins, and
+  the run **fails** if no version satisfies them all (e.g. two extensions require different major
+  versions). The consumer resolves this by listing the extension in its own configuration.
+- With no `MinimumVersion` involved, the first one registered wins (the consumer's entries in order, each
+  followed by its dependencies).
+
+So moving a dependency to a new major version can break consumers that also use other extensions which
+still require the old one — treat it as a breaking change of your own extension.
+
 ## Root module (`<Name>.psm1`)
 
 Boilerplate — the same in every extension. Public/private is by `_` prefix, not an explicit export list:
@@ -326,27 +360,50 @@ Then:
 - **Properties files are not auto-imported.** Forgetting the `. $PSScriptRoot/<group>.properties.ps1` line
   means every property is `$null` at task-execution time, usually surfacing as a task that silently
   no-ops because its `-If` guard is false.
-- **Stale git-ref installs.** Extensions are cached at `.zf/extensions/<Name>/<version-or-git-ref>`, and a
-  ref-based install is only re-downloaded when that folder name changes. With `GitRef = "main"` a moving
-  branch goes stale — delete `.zf/extensions/<Name>` to force a refresh. Pin a tag or SHA for
-  reproducibility.
+- **Installed extensions are reused, not refreshed.** Extensions are cached at
+  `.zf/extensions/<Name>/<version-or-git-ref>`, and an install already in that folder is used as it is —
+  `GitRef = "main"` stays at the commit first downloaded, and a `MinimumVersion` stays at the release first
+  installed while it is still in range. Delete `.zf/extensions/<Name>` and run again to pick up newer
+  commits or releases (and, in `Write` lock mode, commit the updated lock file). A git install is
+  re-downloaded automatically only when its folder name changes or its `GitRepository` /
+  `GitRepositoryFolderPath` changes (e.g. switching to a fork), which ZeroFailed detects from the
+  `.zf-source.json` file it writes into each git install.
+- **The lock file records every extension, dependencies included — but only `Frozen` enforces it.**
+  ZeroFailed records the exact commit or module version, plus a content hash, of every installed extension
+  in `.zf/extensions.lock.json`. Commit it. Lock modes are set by `ZF_EXTENSIONS_LOCK_MODE` (takes
+  precedence) or `$zerofailedExtensionsLockMode` (set before `. ZeroFailed.tasks`): `Write` (default —
+  resolve as normal, ignoring what is locked, then rewrite the lock file), `Frozen` (install exactly what
+  is locked; fail if there is no lock file, if the configuration differs from it, or if an extension's
+  content does not match its hash — checked before any of the extension's code runs) and `Off`. A fresh
+  CI checkout in `Write` mode therefore still installs the latest `main`; set `Frozen` in CI. After changing a consumer's extensions or an extension's declared dependencies,
+  run once in `Write` mode before a `Frozen` CI run, or it will fail. A `MinimumVersion` matches a locked
+  version from the same source that is in its range, even if the lock file records a different range.
+  Local `Path` extensions are recorded but never locked, so they are safe to use in the test loop.
 - **Never mix reference styles in one entry.** `GitRepository` takes precedence, and a stray `Version`
   alongside it fails registration outright (the git installer has no `Version` parameter). Use `GitRef`
-  for git references and `Version` only for PowerShell-repository references. Optional git keys:
-  `GitRef` (defaults to `main`) and `GitRepositoryFolderPath` (defaults to `module`).
-- **A bad `Path` disables the extension instead of failing.** A typo in a local-path reference produces
-  only a warning — `Extension '<Name>' not found at <path> - it has been disabled` — and the build carries
-  on with the tasks missing. `Enabled = $false` does the same thing deliberately.
-- **Duplicate extensions resolve to first-one-wins** with a warning, and so do multiple process
-  definitions. If a dependency is pulled in twice at different versions, the build does not fail — check
-  the warnings.
+  for git references and `Version` only for PowerShell-repository references; `MinimumVersion` replaces
+  either, and is not combined with them. Optional git keys: `GitRef` (defaults to `main` when there is no
+  `MinimumVersion`) and `GitRepositoryFolderPath` (defaults to `module`).
+- **A bad `Path` skips the extension instead of failing.** A typo in a local-path reference produces only
+  a warning — `Extension '<Name>' not found at <path> - it has been disabled` — and the extension is not
+  registered, so the build carries on with its tasks missing. `Enabled = $false` disables one deliberately.
+- **Duplicate extensions resolve to one version.** References that resolve to the same installed copy are
+  merged silently; a warning appears only when they resolve to genuinely different versions (see the
+  `MinimumVersion` rules under *Manifest*). If a newer copy replaces an older installed one, dependencies
+  declared only by the older copy are still registered — delete the old folder to drop them. Multiple
+  process definitions are first-one-wins with a warning.
 - **Load order is dependencies-first.** A task redefined under a name already used by a dependency
   replaces it (last definition wins), which is how a dependent extension deliberately overrides an
   inherited task — and how an accidental name collision silently loses one.
-- **`.zf/extensions/` is generated** — make sure it is git-ignored.
+- **`.zf/extensions/` is generated** — make sure it is git-ignored. `.zf/extensions.lock.json` is not:
+  commit it.
 - **CI override:** `ZF_EXTENSIONS` (JSON, same shape as `$zerofailedExtensions`) replaces the configured
-  extension list entirely, and `ZF_EXTENSIONS_PS_REPO` overrides the default PowerShell repository. Useful
-  for testing an unreleased extension across many repos; surprising if you forget it is set.
+  extension list entirely, `ZF_EXTENSIONS_PS_REPO` overrides the default PowerShell repository, and
+  `ZF_EXTENSIONS_LOCK_MODE` overrides the lock mode (typically `Frozen` in CI). Useful for testing an
+  unreleased extension across many repos; surprising if you forget one is set. A `ZF_EXTENSIONS` override
+  that differs from the committed lock file fails a `Frozen` run, so pair it with `Write` or `Off`.
+- **PowerShell 7.1+.** The core `ZeroFailed` module requires PowerShell 7.1 or later; a `build.ps1`
+  copied from an older extension may still say `#Requires -Version 7` — update it to `7.1`.
 
 ## Checklist
 
@@ -359,5 +416,6 @@ Then:
 - [ ] Tasks attached to `*Core` stages, leaving `Pre*`/`Post*` for consumers
 - [ ] Public functions have help blocks, copyright blocks and sibling `.Tests.ps1` files
 - [ ] `build.ps1`, `.zf/config.ps1`, `GitVersion.yml`, CI workflow and `<Name>.module.tests.ps1` present
+- [ ] `.zf/extensions.lock.json` committed; `.zf/extensions/` git-ignored
 - [ ] `./build.ps1 -Tasks '?'` lists the new tasks; module tests pass
 - [ ] `README.md` states the component types supplied, dependencies, prerequisites and getting-started config snippet; `HELP.md` regenerated
