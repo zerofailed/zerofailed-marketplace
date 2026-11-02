@@ -1,6 +1,6 @@
 ---
 name: cicd-gha
-description: Use when setting up, extending, or troubleshooting a GitHub Actions workflow that drives a ZeroFailed build/deploy — wiring up the reusable workflows and composite actions from endjin/Endjin.RecommendedPractices.GitHubActions (run-build-process, scripted-build-pipeline, scripted-build-matrix-pipeline, scripted-build-single-job-pipeline). Covers choosing an approach, passing env vars/secrets across job boundaries, required permissions, release automation, and dependabot automation.
+description: Use when setting up, extending, or troubleshooting a GitHub Actions workflow that drives a ZeroFailed build/deploy — wiring up the reusable workflows and composite actions from endjin/Endjin.RecommendedPractices.GitHubActions (run-build-process, scripted-build-pipeline, scripted-build-matrix-pipeline, scripted-build-single-job-pipeline). Covers choosing an approach, passing env vars/secrets across job boundaries, required permissions, NuGet.org Trusted Publishing (OIDC), release automation, and dependabot automation.
 ---
 
 # GitHub Actions CI/CD for a ZeroFailed build
@@ -52,6 +52,9 @@ workflow only when you actually need job-level parallelism or a matrix.
     packages: write         # enable publishing packages
     pull-requests: write     # enable test result annotations
   ```
+
+  Add `id-token: write` as well if the build publishes to NuGet.org with Trusted Publishing (see
+  [Publishing to NuGet.org with Trusted Publishing](#publishing-to-nugetorg-with-trusted-publishing)).
 - A `concurrency:` group so a new push cancels an in-flight run for the same ref:
 
   ```yaml
@@ -92,6 +95,81 @@ for the multi-job reusable workflows, to every phase's env that runs `build.ps1`
 separate job that registers the extensions again. A `Frozen` run fails if the lock file is missing or the
 configured extensions differ from it, so commit the lock file updated by a local `Write`-mode run whenever
 `.zf/config.ps1`'s extension list changes.
+
+**Gotcha — Actions variables (`vars.*`) are not environment variables.** Repository and organisation
+variables are only available through `${{ vars.NAME }}` expressions. GitHub never sets them as environment
+variables, so the build process can't read them unless you pass them through. Even a variable named like a
+ZeroFailed override (`ZF_*`) has no effect until you copy it into `environmentVariablesYaml`:
+
+```yaml
+environmentVariablesYaml: |
+  ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_USER: ${{ vars.ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_USER }}
+```
+
+## Publishing to NuGet.org with Trusted Publishing
+
+ZeroFailed.Build.DotNet can get a short-lived NuGet.org API key through
+[Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing) instead of using a stored
+API key (see [`build-dotnet`](../build-dotnet/SKILL.md) for the build properties). The build exchanges a
+GitHub Actions OIDC token with NuGet.org, so the workflow must allow the job to request one and must pass the
+settings into the build.
+
+1. **On NuGet.org**, sign in as a user who is an administrator of the organisation that owns the packages.
+   Select your username, then **Trusted Publishing**, and add a policy:
+   - **Package owner**: the organisation that owns the packages (for example `endjin`).
+   - **Repository Owner** and **Repository**: the GitHub repo.
+   - **Workflow**: the workflow file name only, for example `build.yml`.
+2. **Add `id-token: write`** to the workflow's `permissions:` block.
+3. **Pass the settings into the build** through `environmentVariablesYaml`. Enable Trusted Publishing only for
+   runs that publish to NuGet.org. Runs that publish to GitHub Packages still need an API key.
+4. **Only pass `NUGET_API_KEY` for GitHub Packages.** If both are set, the build uses Trusted Publishing and
+   logs a warning.
+
+Example for the common pattern where tag builds publish to NuGet.org and other builds publish to GitHub
+Packages. The settings are stored as repository variables
+`ZF_BUILD_DOTNET_NUGET_USE_TRUSTED_PUBLISHING` (`true`) and `ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_USER`:
+
+```yaml
+permissions:
+  # ...the standard permissions above, plus:
+  id-token: write  # enable NuGet.org Trusted Publishing (OIDC)
+
+# ...
+    - uses: endjin/Endjin.RecommendedPractices.GitHubActions/actions/prepare-env-vars-and-secrets@main
+      id: prepareEnvVarsAndSecrets
+      with:
+        environmentVariablesYaml: |
+          ZF_NUGET_PUBLISH_SOURCE: ${{ startsWith(github.ref, 'refs/tags/') && 'https://api.nuget.org/v3/index.json' || format('https://nuget.pkg.github.com/{0}/index.json', github.repository_owner) }}
+          # Trusted Publishing only applies to nuget.org - GitHub Packages publishing still uses NUGET_API_KEY
+          ZF_BUILD_DOTNET_NUGET_USE_TRUSTED_PUBLISHING: ${{ startsWith(github.ref, 'refs/tags/') && vars.ZF_BUILD_DOTNET_NUGET_USE_TRUSTED_PUBLISHING || 'false' }}
+          ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_USER: ${{ vars.ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_USER }}
+        secretsYaml: |
+          # nuget.org publishing uses Trusted Publishing (OIDC), so an API key is only needed for GitHub Packages
+          NUGET_API_KEY: "${{ !startsWith(github.ref, 'refs/tags/') && secrets.GITHUB_PUBLISHER_PAT || '' }}"
+        secretsEncryptionKey: ${{ secrets.SHARED_WORKFLOW_KEY }}
+```
+
+If the workflow has other ways to target NuGet.org, such as a `forcePublicNugetDestination` input, use the
+same condition in all three expressions.
+
+**Trusted Publishing gotchas:**
+
+- **The username is the NuGet.org user who created the policy, not the organisation.** The token exchange
+  looks up policies *created by* that user. It rejects organisation names, and it rejects email addresses
+  because it needs the profile name (the `<name>` in `nuget.org/profiles/<name>`). The organisation is set
+  separately as the policy's **Package owner**. A wrong value fails with
+  `No matching trust policy owned by user '<name>' was found.` (HTTP 401). The policy stops working if its
+  creator leaves the organisation on NuGet.org.
+- **Don't write `condition && '' || value`.** An empty string is falsy in GitHub Actions expressions, so this
+  always returns `value`. Negate the condition instead: `!condition && value || ''`.
+- **Don't enable Trusted Publishing unconditionally** (for example by passing the repository variable
+  straight through). A `forcePublish` run that targets GitHub Packages would then request a NuGet.org key and
+  fail.
+- **The multi-job reusable workflows don't support it yet.** The `publish` job in `scripted-build-pipeline`
+  and `scripted-build-matrix-pipeline` declares its own `permissions:` block (`contents: write`,
+  `packages: write`) without `id-token: write`. A job-level block replaces the caller's permissions, so the
+  build can't request an OIDC token. Use the `run-build-process` composite action, or get `id-token: write`
+  added upstream first.
 
 ## Reference
 

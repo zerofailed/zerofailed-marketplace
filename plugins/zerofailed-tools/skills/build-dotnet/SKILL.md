@@ -128,7 +128,7 @@ $ProjectsToPublish = @(
 | `NugetPublishSkipDuplicates` | `$true` | `ZF_BUILD_DOTNET_SKIP_PUBLISH_NUGET_DUPLICATES` | When true, skips packages that already exist at the target feed instead of failing. |
 | `NugetPackageNamesToPublishGlob` | `{ "*.$(($script:GitVersion).SemVer).nupkg" }` | | Glob selecting which built packages get published — defaults to everything matching the current build's version. Lazy-evaluated. |
 | `NugetPublishUseTrustedPublishing` | `$false` | `ZF_BUILD_DOTNET_NUGET_USE_TRUSTED_PUBLISHING` | When true, obtains a short-lived API key via NuGet.org Trusted Publishing (GitHub Actions OIDC) instead of reading `NUGET_API_KEY`. See [Publishing to NuGet.org with Trusted Publishing](#publishing-to-nugetorg-with-trusted-publishing). |
-| `NugetTrustedPublishingUsername` | `""` | `ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_USER` | NuGet.org username (profile name, **not** email address) that owns the Trusted Publishing policy. Required when Trusted Publishing is enabled. |
+| `NugetTrustedPublishingUsername` | `""` | `ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_USER` | NuGet.org username (profile name, **not** email address) of the user who created the Trusted Publishing policy — not the organisation that owns the packages. Required when Trusted Publishing is enabled. |
 | `NugetTrustedPublishingTokenEndpoint` | `"https://www.nuget.org/api/v2/token"` | `ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_TOKEN_ENDPOINT` | NuGet.org endpoint that exchanges the OIDC token for an API key. |
 | `NugetTrustedPublishingAudience` | `"https://www.nuget.org"` | `ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_AUDIENCE` | Audience requested for the GitHub Actions OIDC token. |
 
