@@ -73,3 +73,7 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         secretsEncryptionKey: ${{ secrets.SHARED_WORKFLOW_KEY }}
 ```
+
+To publish to NuGet.org with Trusted Publishing instead of `secrets.NUGET_APIKEY`, add `id-token: write` to
+`permissions:` and change the `environmentVariablesYaml`/`secretsYaml` blocks as shown in
+[Publishing to NuGet.org with Trusted Publishing](../SKILL.md#publishing-to-nugetorg-with-trusted-publishing).
