@@ -1,6 +1,6 @@
 ---
 name: build-dotnet
-description: Use when configuring or troubleshooting a ZeroFailed build that uses ZeroFailed.Build.DotNet — .NET solution compile, test with code coverage, test/coverage reporting, SBOM generation (Covenant), NuGet/publish packaging, and NuGet publishing. Covers its full property set, tasks, and dependency chain.
+description: Use when configuring or troubleshooting a ZeroFailed build that uses ZeroFailed.Build.DotNet — .NET solution compile, test with code coverage, test/coverage reporting, SBOM generation (Covenant), NuGet/publish packaging, and NuGet publishing (API key or NuGet.org Trusted Publishing via GitHub Actions OIDC). Covers its full property set, tasks, and dependency chain.
 ---
 
 # ZeroFailed.Build.DotNet
@@ -127,6 +127,14 @@ $ProjectsToPublish = @(
 | `NugetPublishSymbolSource` | `""` | `ZF_BUILD_DOTNET_NUGET_PUBLISH_SYMBOL_SOURCE` | Symbol package source. Empty = same as `NugetPublishSource`. |
 | `NugetPublishSkipDuplicates` | `$true` | `ZF_BUILD_DOTNET_SKIP_PUBLISH_NUGET_DUPLICATES` | When true, skips packages that already exist at the target feed instead of failing. |
 | `NugetPackageNamesToPublishGlob` | `{ "*.$(($script:GitVersion).SemVer).nupkg" }` | | Glob selecting which built packages get published — defaults to everything matching the current build's version. Lazy-evaluated. |
+| `NugetPublishUseTrustedPublishing` | `$false` | `ZF_BUILD_DOTNET_NUGET_USE_TRUSTED_PUBLISHING` | When true, obtains a short-lived API key via NuGet.org Trusted Publishing (GitHub Actions OIDC) instead of reading `NUGET_API_KEY`. See [Publishing to NuGet.org with Trusted Publishing](#publishing-to-nugetorg-with-trusted-publishing). |
+| `NugetTrustedPublishingUsername` | `""` | `ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_USER` | NuGet.org username (profile name, **not** email address) of the user who created the Trusted Publishing policy — not the organisation that owns the packages. Required when Trusted Publishing is enabled. |
+| `NugetTrustedPublishingTokenEndpoint` | `"https://www.nuget.org/api/v2/token"` | `ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_TOKEN_ENDPOINT` | NuGet.org endpoint that exchanges the OIDC token for an API key. |
+| `NugetTrustedPublishingAudience` | `"https://www.nuget.org"` | `ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_AUDIENCE` | Audience requested for the GitHub Actions OIDC token. |
+
+Authentication: by default `PublishNuGetPackages` uses the `NUGET_API_KEY` environment variable (falling
+back to a dummy `"no-key"` value, with a warning for non-file feeds). When `NugetPublishUseTrustedPublishing`
+is enabled, it uses Trusted Publishing instead and ignores `NUGET_API_KEY`, warning if both are set.
 
 ## Tasks
 
@@ -185,6 +193,34 @@ task . FullBuild
 See [ZeroFailed.Sample.Build.DotNet](https://github.com/zerofailed/ZeroFailed.Sample.Build.DotNet) for a
 full end-to-end example repo.
 
+### Publishing to NuGet.org with Trusted Publishing
+
+[Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing) removes the need to
+store a long-lived NuGet.org API key. `PublishNuGetPackages` requests a GitHub Actions OIDC token, exchanges it
+at NuGet.org for an API key that is valid for 1 hour, masks the key in the logs, and uses it to push. Only
+GitHub Actions is supported.
+
+1. On NuGet.org, select your username, then **Trusted Publishing**. Add a policy with the repository owner, the
+   repository name and the workflow **file name only** (for example `build.yml`, not
+   `.github/workflows/build.yml`). You can also restrict the policy to a GitHub Actions environment.
+2. Give the job that runs the build the `id-token: write` permission:
+
+    ```yaml
+    permissions:
+      id-token: write
+    ```
+
+3. Configure the build, either with environment variables or in `build.ps1`:
+
+    ```powershell
+    $NugetPublishSource = "https://api.nuget.org/v3/index.json"
+    $NugetPublishUseTrustedPublishing = $true
+    $NugetTrustedPublishingUsername = "contoso-bot"     # NuGet.org profile name, not email
+    ```
+
+    The equivalent environment variables are `ZF_BUILD_DOTNET_NUGET_PUBLISH_SOURCE`,
+    `ZF_BUILD_DOTNET_NUGET_USE_TRUSTED_PUBLISHING=true` and `ZF_BUILD_DOTNET_NUGET_TRUSTED_PUBLISHING_USER`.
+
 ## Gotchas
 
 - **`SolutionToBuild` gates almost everything.** Most Compile/Package/Publish tasks no-op silently if it's
@@ -204,6 +240,17 @@ full end-to-end example repo.
 - **The generated `HELP.md`'s `ENV Override` column under-reports env vars** for Compile/Test/Package/
   Publish/Report/Analysis — most properties in those groups do have a `ZF_BUILD_DOTNET_*` binding even
   where the table leaves it blank. The table above was built from `module/tasks/*.properties.ps1` directly.
+- **Trusted Publishing fails fast outside GitHub Actions.** If `ACTIONS_ID_TOKEN_REQUEST_URL`/`_TOKEN` aren't
+  set, the build stops with an error that names the missing `id-token: write` permission. This happens on local
+  builds, on other CI servers, and on jobs without that permission. Enable Trusted Publishing only in the CI job
+  that publishes, for example through the environment variable.
+- **Trusted Publishing token-exchange errors usually mean a policy mismatch.** The error includes the NuGet.org
+  response body. Check the username (profile name, not email), the owner/repo, the workflow file name and the
+  environment against the NuGet.org policy. A new policy for a private repo stays active for only 7 days until
+  its first successful publish.
+- **Trusted Publishing skips the token exchange when there's nothing to publish.** Each OIDC token can be exchanged
+  only once, so `PublishNuGetPackages` returns early, without calling NuGet.org, when the publish glob matches
+  no packages.
 - **Lazy-evaluated properties** (`*FileLoggerProps`, `NugetPackageNamesToPublishGlob`) are scriptblocks —
   override them with another scriptblock (not a literal string) if you want to keep referencing
   `$DotNetFileLoggerVerbosity`/`$script:GitVersion` at task-execution time rather than baking in a value.
