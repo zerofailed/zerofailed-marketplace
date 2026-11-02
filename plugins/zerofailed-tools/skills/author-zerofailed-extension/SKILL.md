@@ -147,8 +147,9 @@ When several extensions require the same extension, ZeroFailed installs one vers
 
 - If the consumer's `.zf/config.ps1` lists it, that version wins, with a warning if it is outside a range
   another extension requires.
-- Otherwise, if any of the requests uses `MinimumVersion`, the newest version in **every** range wins, and
-  the run **fails** if no version satisfies them all (e.g. two extensions require different major
+- Otherwise, if any of the requests uses `MinimumVersion`, the newest version in **every** range wins
+  (ZeroFailed installs it if none of the versions the requests resolved to is in every range, e.g. when
+  only one request allows pre-releases), and the run **fails** if no version satisfies them all (e.g. two extensions require different major
   versions). The consumer resolves this by listing the extension in its own configuration.
 - With no `MinimumVersion` involved, the first one registered wins (the consumer's entries in order, each
   followed by its dependencies).
