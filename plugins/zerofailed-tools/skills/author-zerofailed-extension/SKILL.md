@@ -147,11 +147,12 @@ draft GitHub Release whose tag does not exist yet is not; and the GitHub "pre-re
 When several extensions require the same extension, ZeroFailed installs one version of it:
 
 - If the consumer's `.zf/config.ps1` lists it, that version wins, with a warning if it is outside a range
-  another extension requires.
+  another extension requires. This holds wherever the configuration lists it, and in `Frozen` lock mode.
 - Otherwise, if any of the requests uses `MinimumVersion`, the newest version in **every** range wins
   (ZeroFailed installs it if none of the versions the requests resolved to is in every range, e.g. when
-  only one request allows pre-releases), and the run **fails** if no version satisfies them all (e.g. two extensions require different major
-  versions). The consumer resolves this by listing the extension in its own configuration.
+  only one request allows pre-releases), and the run **fails** if no version satisfies them all (e.g.
+  two extensions require different major versions). The consumer resolves this by listing the
+  extension in its own configuration.
 - With no `MinimumVersion` involved, the first one registered wins (the consumer's entries in order, each
   followed by its dependencies).
 
@@ -379,10 +380,17 @@ Then:
   resolve as normal, ignoring what is locked, then rewrite the lock file), `Frozen` (install exactly what
   is locked; fail if there is no lock file, if the configuration differs from it, or if an extension's
   content does not match its hash — checked before any of the extension's code runs) and `Off`. A fresh
-  CI checkout in `Write` mode therefore still installs the latest `main`; set `Frozen` in CI. After changing a consumer's extensions or an extension's declared dependencies,
-  run once in `Write` mode before a `Frozen` CI run, or it will fail. A `MinimumVersion` matches a locked
-  version from the same source that is in its range, even if the lock file records a different range.
-  Local `Path` extensions are recorded but never locked, so they are safe to use in the test loop.
+  CI checkout in `Write` mode therefore still installs the latest `main`; set `Frozen` in CI. After
+  changing a consumer's extensions or an extension's declared dependencies, run once in `Write` mode
+  before a `Frozen` CI run, or it will fail. In `Frozen` mode, an extension that is requested differently
+  from the lock file is not installed, nor are its dependencies, so none of their code runs before the
+  run fails. A `MinimumVersion` matches a locked version from the same source that is in its range, even if
+  the lock file records a different range. An exact `Version` with fewer than 3 parts (e.g. `1.4`) is
+  treated, and locked, as its full version (`1.4.0`). Local `Path` extensions are recorded but never
+  locked, so they are safe to use in the test loop.
+- **One run at a time per `.zf` folder.** Registering extensions, and writing the lock file, holds a
+  lock on the `.zf` folder. A second run that uses the same folder at the same time (e.g. parallel builds
+  of one working copy) waits up to 10 minutes for the first run to finish registering its extensions.
 - **Never mix reference styles in one entry.** `GitRepository` takes precedence, and a stray `Version`
   alongside it fails registration outright (the git installer has no `Version` parameter). Use `GitRef`
   for git references and `Version` only for PowerShell-repository references; `MinimumVersion` replaces
