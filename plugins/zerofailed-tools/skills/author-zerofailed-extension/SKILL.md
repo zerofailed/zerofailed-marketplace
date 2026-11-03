@@ -128,7 +128,8 @@ Each dependency entry takes the same keys as a `$zerofailedExtensions` entry: a 
 releases: it installs the newest release from that version up to, but not including, the next major
 version (below `1.0.0`, the first non-zero part sets the limit, so `0.3.1` accepts `<0.4.0`). For a git
 dependency, releases are tags named after a full semantic version (`1.4.2` or `v1.4.2`); other tags such as
-`v1` are ignored. Pre-release versions are only considered with `PreRelease = $true`.
+`v1` are ignored. Pre-release versions are only considered with `PreRelease = $true`, or when the
+`MinimumVersion` is itself a pre-release (e.g. `1.5.0-beta.1`).
 
 "Release" here means the git tag only — ZeroFailed lists tags with `git ls-remote` and never looks at
 GitHub Releases (so it works the same on any git host). A pushed tag with no GitHub Release is used; a
@@ -146,10 +147,12 @@ draft GitHub Release whose tag does not exist yet is not; and the GitHub "pre-re
 When several extensions require the same extension, ZeroFailed installs one version of it:
 
 - If the consumer's `.zf/config.ps1` lists it, that version wins, with a warning if it is outside a range
-  another extension requires.
-- Otherwise, if any of the requests uses `MinimumVersion`, the newest version in **every** range wins, and
-  the run **fails** if no version satisfies them all (e.g. two extensions require different major
-  versions). The consumer resolves this by listing the extension in its own configuration.
+  another extension requires. This holds wherever the configuration lists it, and in `Frozen` lock mode.
+- Otherwise, if any of the requests uses `MinimumVersion`, the newest version in **every** range wins
+  (ZeroFailed installs it if none of the versions the requests resolved to is in every range, e.g. when
+  only one request allows pre-releases), and the run **fails** if no version satisfies them all (e.g.
+  two extensions require different major versions). The consumer resolves this by listing the
+  extension in its own configuration.
 - With no `MinimumVersion` involved, the first one registered wins (the consumer's entries in order, each
   followed by its dependencies).
 
@@ -361,13 +364,15 @@ Then:
   means every property is `$null` at task-execution time, usually surfacing as a task that silently
   no-ops because its `-If` guard is false.
 - **Installed extensions are reused, not refreshed.** Extensions are cached at
-  `.zf/extensions/<Name>/<version-or-git-ref>`, and an install already in that folder is used as it is —
-  `GitRef = "main"` stays at the commit first downloaded, and a `MinimumVersion` stays at the release first
-  installed while it is still in range. Delete `.zf/extensions/<Name>` and run again to pick up newer
-  commits or releases (and, in `Write` lock mode, commit the updated lock file). A git install is
-  re-downloaded automatically only when its folder name changes or its `GitRepository` /
-  `GitRepositoryFolderPath` changes (e.g. switching to a fork), which ZeroFailed detects from the
-  `.zf-source.json` file it writes into each git install.
+  `.zf/extensions/<Name>/<version>` (PowerShell repository) or `.zf/extensions/<Name>/<git-ref>-<hash>`
+  (git), and an install already in that folder is used as it is — `GitRef = "main"` stays at the commit
+  first downloaded, and a `MinimumVersion` stays at the release first installed while it is still in
+  range. Delete `.zf/extensions/<Name>` and run again to pick up newer commits or releases (and, in
+  `Write` lock mode, commit the updated lock file). The `<hash>` is a short hash of the `GitRepository`
+  (ignoring case, and a trailing `/` or `.git`) and `GitRepositoryFolderPath`, so switching to a fork or
+  another folder installs into a new folder, and two sources never overwrite each other's files. Each git
+  install records its source and commit in a `.zf-source.json` file, written after every other file, so
+  a folder without it (e.g. from an interrupted install) is installed again.
 - **The lock file records every extension, dependencies included — but only `Frozen` enforces it.**
   ZeroFailed records the exact commit or module version, plus a content hash, of every installed extension
   in `.zf/extensions.lock.json`. Commit it. Lock modes are set by `ZF_EXTENSIONS_LOCK_MODE` (takes
@@ -375,10 +380,17 @@ Then:
   resolve as normal, ignoring what is locked, then rewrite the lock file), `Frozen` (install exactly what
   is locked; fail if there is no lock file, if the configuration differs from it, or if an extension's
   content does not match its hash — checked before any of the extension's code runs) and `Off`. A fresh
-  CI checkout in `Write` mode therefore still installs the latest `main`; set `Frozen` in CI. After changing a consumer's extensions or an extension's declared dependencies,
-  run once in `Write` mode before a `Frozen` CI run, or it will fail. A `MinimumVersion` matches a locked
-  version from the same source that is in its range, even if the lock file records a different range.
-  Local `Path` extensions are recorded but never locked, so they are safe to use in the test loop.
+  CI checkout in `Write` mode therefore still installs the latest `main`; set `Frozen` in CI. After
+  changing a consumer's extensions or an extension's declared dependencies, run once in `Write` mode
+  before a `Frozen` CI run, or it will fail. In `Frozen` mode, an extension that is requested differently
+  from the lock file is not installed, nor are its dependencies, so none of their code runs before the
+  run fails. A `MinimumVersion` matches a locked version from the same source that is in its range, even if
+  the lock file records a different range. An exact `Version` with fewer than 3 parts (e.g. `1.4`) is
+  treated, and locked, as its full version (`1.4.0`). Local `Path` extensions are recorded but never
+  locked, so they are safe to use in the test loop.
+- **One run at a time per `.zf` folder.** Registering extensions, and writing the lock file, holds a
+  lock on the `.zf` folder. A second run that uses the same folder at the same time (e.g. parallel builds
+  of one working copy) waits up to 10 minutes for the first run to finish registering its extensions.
 - **Never mix reference styles in one entry.** `GitRepository` takes precedence, and a stray `Version`
   alongside it fails registration outright (the git installer has no `Version` parameter). Use `GitRef`
   for git references and `Version` only for PowerShell-repository references; `MinimumVersion` replaces
@@ -389,9 +401,9 @@ Then:
   registered, so the build carries on with its tasks missing. `Enabled = $false` disables one deliberately.
 - **Duplicate extensions resolve to one version.** References that resolve to the same installed copy are
   merged silently; a warning appears only when they resolve to genuinely different versions (see the
-  `MinimumVersion` rules under *Manifest*). If a newer copy replaces an older installed one, dependencies
-  declared only by the older copy are still registered — delete the old folder to drop them. Multiple
-  process definitions are first-one-wins with a warning.
+  `MinimumVersion` rules under *Manifest*). Once a version is chosen, the other versions are not used,
+  and neither are the dependencies that only they declare. Multiple process definitions are
+  first-one-wins with a warning.
 - **Load order is dependencies-first.** A task redefined under a name already used by a dependency
   replaces it (last definition wins), which is how a dependent extension deliberately overrides an
   inherited task — and how an accidental name collision silently loses one.
