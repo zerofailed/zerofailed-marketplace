@@ -113,6 +113,12 @@ typically declares this extension plus its `Process` reference as one of *its ow
 need to reference `ZeroFailed.Deploy.Common` explicitly yourself in that case, and should not set `Process`
 again (first-one-wins on duplicate process definitions).
 
+**NOTE:** if the repo also has a ZeroFailed build (`build.ps1`), give the deployment its own folder, for
+example `.zf/deploy/config.ps1` with `. ZeroFailed.tasks -ZfPath $here/.zf/deploy`. ZeroFailed keeps one
+extensions lock file for each `ZfPath`, and the build and the deployment use different extensions, so if
+they shared `.zf` each run would overwrite the other's lock file. See
+[`upgrade-zerofailed`](../upgrade-zerofailed/SKILL.md#3-give-each-process-its-own-zf-folder).
+
 ## Gotchas
 
 - **The `Process` key is only needed when referencing this extension directly.** Any downstream

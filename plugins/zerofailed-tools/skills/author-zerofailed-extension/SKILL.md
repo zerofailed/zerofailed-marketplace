@@ -387,7 +387,10 @@ Then:
   run fails. A `MinimumVersion` matches a locked version from the same source that is in its range, even if
   the lock file records a different range. An exact `Version` with fewer than 3 parts (e.g. `1.4`) is
   treated, and locked, as its full version (`1.4.0`). Local `Path` extensions are recorded but never
-  locked, so they are safe to use in the test loop.
+  locked, so they are safe to use in the test loop. The content hash is calculated from the installed
+  files (ignoring line endings), so a `Write` run after a hand edit to an installed copy under
+  `.zf/extensions/` records a hash that every clean install fails. To upgrade a consumer's entry-point
+  scripts and adopt the lock file, see [`upgrade-zerofailed`](../upgrade-zerofailed/SKILL.md).
 - **One run at a time per `.zf` folder.** Registering extensions, and writing the lock file, holds a
   lock on the `.zf` folder. A second run that uses the same folder at the same time (e.g. parallel builds
   of one working copy) waits up to 10 minutes for the first run to finish registering its extensions.
