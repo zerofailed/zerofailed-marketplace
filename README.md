@@ -64,7 +64,7 @@ claude plugin marketplace update zerofailed   # refresh on subsequent runs
 
 Skills are namespaced by plugin, so each can be invoked explicitly as `/zerofailed-tools:<skill-name>` — but explicit invocation is the exception. Each skill's frontmatter `description` states when it applies, and the agent loads the matching skill automatically when your question matches it, so normally you just ask.
 
-`zerofailed-tools` contains three kinds of skill:
+`zerofailed-tools` contains four kinds of skill:
 
 **Authoring** — `author-zerofailed-extension` covers the module layout, task and property conventions, extension dependency metadata, how to hook into the standard build process, and the local test loop. It triggers when you ask your agent to create a new ZeroFailed extension or add tasks, properties or functions to an existing one.
 
@@ -93,12 +93,21 @@ when you ask your agent to set up, extend, or troubleshoot a GitHub Actions work
 build/deploy — choosing between the composite action and the (matrix) reusable workflows, passing env
 vars/secrets across job boundaries, and wiring up release/dependabot automation.
 
+**Upgrading** — `upgrade-zerofailed` upgrades a repo to the latest version of the core ZeroFailed module.
+It updates the entry-point scripts (`build.ps1`, `deploy.ps1`, …) with the reference bootstrap code:
+installing from GitHub Packages with the workflow's token, falling back to PSGallery, retrying the
+InvokeBuild install, and importing the module in a way that works on Linux. It also gives each process its
+own `.zf` folder and lock file, makes GitHub Actions runs use `Frozen` lock mode, updates the workflow
+permissions, and verifies the result with a clean Linux install. It triggers when you ask your agent to
+upgrade ZeroFailed, or to adopt the lock file or Frozen mode in CI.
+
 Example prompts, and the skill each triggers:
 
 - "Why didn't my Pester tests run in this ZeroFailed build?" → `build-powershell`
 - "Add a Bicep deployment of our infra to the deploy process" → `deploy-azure`
 - "Which property turns off SBOM generation, and what's its env var?" → `build-dotnet`
 - "Add a GitHub Actions build workflow that publishes to NuGet on tag" → `cicd-gha`
+- "Upgrade this repo to the latest version of ZeroFailed" → `upgrade-zerofailed`
 
 The ZF extension reference skills complement — not replace — each extension's own `HELP.md`: they were written by verifying the generated docs against the extension source, and they record discrepancies and gotchas where the two disagree.
 

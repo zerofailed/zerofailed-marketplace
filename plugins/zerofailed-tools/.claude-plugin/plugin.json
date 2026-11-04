@@ -1,7 +1,7 @@
 {
   "name": "zerofailed-tools",
   "displayName": "ZeroFailed Tools",
-  "description": "Tools for working with the ZeroFailed automation framework — includes author-zerofailed-extension for scaffolding and extending ZeroFailed extension modules, a reference skill for each ZeroFailed build/deploy extension (DevOps.Common, Build.Common/DotNet/PowerShell/Python/GitHub/Containers, Deploy.Common/Azure/PowerBI/Fabric) covering their properties, tasks and dependency chains, pluscicd-gha for wiring up the companion GitHub Actions reusable workflows",
+  "description": "Tools for working with the ZeroFailed automation framework — includes author-zerofailed-extension for scaffolding and extending ZeroFailed extension modules, a reference skill for each ZeroFailed build/deploy extension (DevOps.Common, Build.Common/DotNet/PowerShell/Python/GitHub/Containers, Deploy.Common/Azure/PowerBI/Fabric) covering their properties, tasks and dependency chains, cicd-gha for wiring up the companion GitHub Actions reusable workflows, plus upgrade-zerofailed for upgrading a repo to the latest ZeroFailed (entry-point bootstrap, per-process lock files, Frozen mode in CI)",
   "author": {
     "name": "ZeroFailed",
     "url": "https://github.com/zerofailed"

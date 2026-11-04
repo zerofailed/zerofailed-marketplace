@@ -96,6 +96,13 @@ separate job that registers the extensions again. A `Frozen` run fails if the lo
 configured extensions differ from it, so commit the lock file updated by a local `Write`-mode run whenever
 `.zf/config.ps1`'s extension list changes.
 
+An entry-point script upgraded with [`upgrade-zerofailed`](../upgrade-zerofailed/SKILL.md) already
+defaults to `Frozen` when `GITHUB_ACTIONS` is `true`, so it needs no `ZF_EXTENSIONS_LOCK_MODE` entry. That
+script installs ZeroFailed from GitHub Packages, which needs a token even for a public package. Give each
+job that runs it `packages: read`. The token comes from the `GITHUB_TOKEN` or `GH_TOKEN` environment
+variable: `run-build-process` and `run-scripted-build` set one of them for you, but other steps need
+`GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` in their `env:`.
+
 **Gotcha — Actions variables (`vars.*`) are not environment variables.** Repository and organisation
 variables are only available through `${{ vars.NAME }}` expressions. GitHub never sets them as environment
 variables, so the build process can't read them unless you pass them through. Even a variable named like a
