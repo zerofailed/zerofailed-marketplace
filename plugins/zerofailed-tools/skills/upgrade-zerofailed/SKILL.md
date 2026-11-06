@@ -1,6 +1,6 @@
 ---
 name: upgrade-zerofailed
-description: Use when upgrading a repo to the latest version of the ZeroFailed module, or when adopting the extensions lock file, Frozen lock mode in CI, or the hardened module bootstrap in build.ps1/deploy.ps1 (GitHub Packages install with GITHUB_TOKEN, PSGallery fallback, InvokeBuild retry, Linux-safe import). Covers discovering the entry-point scripts, updating them, giving each process its own .zf folder, generating and committing lock files, workflow permissions, and verifying with a clean Linux install.
+description: Use when upgrading a repo to the latest version of the ZeroFailed module, or when adopting the extensions lock file, Frozen lock mode in CI, or the hardened module bootstrap in build.ps1/deploy.ps1 (GitHub Packages install with GITHUB_TOKEN, PSGallery fallback, InvokeBuild retry, Linux-safe import), or when replacing PowerShellGet commands (Install-Module, Register-PSRepository, …) with PSResourceGet. Covers discovering the entry-point scripts, updating them, giving each process its own .zf folder, generating and committing lock files, workflow permissions, and verifying with a clean Linux install.
 ---
 
 # Upgrade a repo to the latest ZeroFailed
@@ -20,6 +20,10 @@ practices that ZeroFailed 2.0 makes possible:
 - **A more reliable bootstrap.** The scripts install ZeroFailed from GitHub Packages with the workflow's
   token (PSGallery is sometimes unavailable, and CI installs the module on every run), fall back to
   PSGallery, retry the InvokeBuild install, and import the module in a way that works on Linux.
+- **PSResourceGet, not PowerShellGet.** Every module install, lookup and publish in the scripts and config
+  files uses PSResourceGet (`Install-PSResource`, `Get-InstalledPSResource`, …). ZeroFailed and its
+  extensions use PSResourceGet, and it keeps a separate repository list from PowerShellGet, so mixing the
+  two causes "repository not found" failures.
 
 This skill is about the scripts that *load* ZeroFailed. For the lock modes themselves, see the lock file
 gotchas in [`author-zerofailed-extension`](../author-zerofailed-extension/SKILL.md#gotchas). For the
@@ -40,8 +44,16 @@ workflows that run the scripts, see [`cicd-gha`](../cicd-gha/SKILL.md).
 Find each script that loads ZeroFailed, and each config file that calls `. ZeroFailed.tasks`:
 
 ```powershell
-git grep -l -e 'Install-PSResource ZeroFailed' -e 'ZfModuleVersion' -- '*.ps1'
+git grep -l -e 'Install-PSResource ZeroFailed' -e 'Install-Module ZeroFailed' -e 'ZfModuleVersion' -- '*.ps1'
 git grep -n -e '\. ZeroFailed\.tasks' -- '*.ps1'
+```
+
+Then find every PowerShellGet command in the repo's PowerShell files, outside the installed extensions.
+Older templates install InvokeBuild and ZeroFailed with `Install-Module`, and config files often have
+custom tasks that call PowerShellGet:
+
+```powershell
+git grep -n -E '\b(Install|Find|Save|Update|Publish|Uninstall)-Module\b|\b(Get|Register|Set|Unregister)-PSRepository\b|\bGet-InstalledModule\b|\bUpdate-ModuleManifest\b' -- '*.ps1' '*.psm1' ':!**/extensions/**'
 ```
 
 For each script, record:
@@ -102,8 +114,32 @@ Replace these parts of each script with the code in
 
 Set `$ZfModuleVersion` to the version from step 1. Keep the script's own parameters, help and failure
 message. The reference lists the template lines that it removes on purpose (for example
-`Import-Module Microsoft.PowerShell.PSResourceGet`); remove those too. If a script has other code in the
-bootstrap regions that the template doesn't have, keep it, and check that it still works with the new code.
+`Import-Module Microsoft.PowerShell.PSResourceGet`); remove those too. A script from an older template
+may use PowerShellGet instead: `Get-Module -ListAvailable InvokeBuild`, `Install-Module InvokeBuild …`,
+`Import-Module InvokeBuild` and `Install-Module ZeroFailed … -AllowPrerelease`. The reference code
+replaces all of these. If a script has other code in the bootstrap regions that the template doesn't have,
+keep it, and check that it still works with the new code. Move any PowerShellGet commands in that code to
+PSResourceGet, as described in step 2a.
+
+### 2a. Replace PowerShellGet in the config files and custom tasks
+
+For each PowerShellGet command that step 0 found outside the bootstrap regions, use the PSResourceGet
+equivalent. The table in
+[`author-zerofailed-extension`](../author-zerofailed-extension/SKILL.md#installing-and-publishing-modules)
+maps each command. The changes that most often need care:
+
+- `-RequiredVersion 1.2.3` becomes `-Version '[1.2.3]'`, and `-AllowPrerelease` becomes `-Prerelease`.
+  `-Force` (used to skip prompts) becomes `-TrustRepository`.
+- A repository registered with `Register-PSRepository` isn't visible to PSResourceGet. Register it with
+  `Register-PSResourceRepository -Uri … -Trusted` instead. There is no separate publish location.
+- A module that a custom task installs and imports can usually be added to `$RequiredPowerShellModules`
+  instead, so that `ZeroFailed.DevOps.Common`'s `setupModules` task installs it with retries.
+
+If the repo uses `ZeroFailed.Build.PowerShell`, version 2.0 of that extension moved its publishing from
+PowerShellGet to PSResourceGet. A config that pins it to 1.x (for example `MinimumVersion = "1.3.0"`)
+keeps working, but when you move it to 2.x, check its `PowerShellRepositories`, its
+`EnablePowerShellModuleForcePublish` setting and the published module's `RequiredModules` — see
+[Upgrading from 1.x in `build-powershell`](../build-powershell/SKILL.md#upgrading-from-1x).
 
 ### 3. Give each process its own `.zf` folder
 
@@ -299,6 +335,8 @@ file, not in the bootstrap code. Check that the file it needs is in the copy.
 - [ ] Every entry-point script, its config file, its `ZfPath` and the workflows that run it are listed
 - [ ] `$ZfModuleVersion` is the latest release, and the release notes since the old version are applied
 - [ ] Each script has `#Requires -Version 7.1` and the reference bootstrap code
+- [ ] No PowerShellGet commands are left in the scripts, config files or custom tasks (the step 0 search
+      finds nothing)
 - [ ] Each process with its own extensions has its own `.zf/<process>/` folder, and `.gitignore` has
       `/.zf/**/extensions/`
 - [ ] The lock files were generated from clean installs and committed, one for each process

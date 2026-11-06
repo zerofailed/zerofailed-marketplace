@@ -295,6 +295,49 @@ extension gets transitively: `Resolve-Value`, `Install-DotNetTool`, `Get-DotNetT
 `Set-BuildServerVariable`, `New-TemporaryDirectory`, `Register-OnEnterAction`, `Register-OnExitAction`,
 `Test-AzCliConnection`, `Get-HttpHeaderValue`, `Write-ErrorLogMessage`.
 
+## Installing and publishing modules
+
+Use **PSResourceGet** (`Microsoft.PowerShell.PSResourceGet`) for every PowerShell module operation in
+tasks and functions — never PowerShellGet (`Install-Module`, `Find-Module`, …). ZeroFailed itself, the
+entry-point bootstrap, `ZeroFailed.DevOps.Common`'s `setupModules` task and `ZeroFailed.Build.PowerShell`
+2.x all use PSResourceGet. PSResourceGet is included in PowerShell 7.4 and later.
+
+The two modules keep **separate repository lists**, so mixing them causes failures that are hard to
+diagnose: a repository registered with `Register-PSRepository` is not found by `Find-PSResource` or
+`Publish-PSResource`, and the reverse.
+
+| PowerShellGet (don't use) | PSResourceGet (use) | Notes |
+|---|---|---|
+| `Install-Module X -RequiredVersion 1.2.3 -Force` | `Install-PSResource X -Version '[1.2.3]' -TrustRepository` | `-Version` takes a NuGet version range: `'[1.2.3]'` is exact, `'[1.0,2.0)'` is 1.x, `'[1.0,)'` is 1.0 or later. Unlike NuGet, a bare `1.2.3` means exactly 1.2.3. |
+| `-AllowPrerelease` | `-Prerelease` | e.g. `-Prerelease:($version -match '-')` |
+| `Install-Module … -Force` (to skip prompts) | `-TrustRepository` | Also pass `-Repository PSGallery` so a higher-priority repository (e.g. GitHub Packages) isn't searched. |
+| `Get-Module -ListAvailable X` / `Get-InstalledModule` | `Get-InstalledPSResource X -Version … -ErrorAction Ignore` | Check before installing, so a run doesn't contact the repository when the module is already there. |
+| `Find-Module` | `Find-PSResource` | |
+| `Save-Module` | `Save-PSResource` | |
+| `Register-PSRepository -SourceLocation … -InstallationPolicy Trusted` | `Register-PSResourceRepository -Uri … -Trusted` | No separate publish location: PSResourceGet publishes to the `-Uri`. |
+| `Get-PSRepository` | `Get-PSResourceRepository` | |
+| `Publish-Module -Path … -NuGetApiKey` | `Publish-PSResource -Path … -ApiKey` | No `-Force`. Checks that `RequiredModules` are in the target repository unless `-SkipDependenciesCheck`. |
+| `Update-ModuleManifest` | `Update-PSModuleManifest` | Fails on empty `PrivateData.PSData` entries (e.g. `ExternalModuleDependencies = @()`), and rejects an empty `-Prerelease`. |
+
+To install modules that tasks need, prefer adding them to `$RequiredPowerShellModules` (from
+`ZeroFailed.DevOps.Common`) in a task that runs `-Before setupModules`, rather than installing them
+yourself. `setupModules` passes the hashtable to `Install-PSResource -RequiredResource`, retries
+transient failures, and imports each module:
+
+```powershell
+# Synopsis: Ensures the required PlatyPS module is available
+task EnsurePlatyPSModule -If { !$SkipGeneratePSMarkdownDocs } -Before setupModules {
+    if (!$RequiredPowerShellModules.ContainsKey('Microsoft.PowerShell.PlatyPS')) {
+        $script:RequiredPowerShellModules += @{
+            'Microsoft.PowerShell.PlatyPS' = @{ version = '[1.0,2.0)'; repository = 'PSGallery' }
+        }
+    }
+}
+```
+
+When you migrate an extension from PowerShellGet, update its Pester tests too: mocks of `Install-Module`,
+`Find-Module` and so on no longer match, so a test can pass while the real command is called.
+
 ## The extension's own build
 
 An extension builds and publishes itself with ZeroFailed, using
@@ -331,7 +374,10 @@ task . FullBuild
 
 Set `$PesterCodeCoverageEnabled = $false` if the extension exports no functions (tasks-only extensions).
 `ZeroFailed.Build.PowerShell` also provides the PlatyPS-based documentation tasks that generate the
-markdown reference — regenerate `HELP.md` / `docs/` rather than hand-editing them.
+markdown reference — regenerate `HELP.md` / `docs/` rather than hand-editing them. From version 2.0 it
+publishes with PSResourceGet: any `RequiredModules` in the manifest must be in each target repository
+(or be listed in `PSData.ExternalModuleDependencies`), and must not use a wildcard `MaximumVersion` — see
+`build-powershell`.
 
 ## Test loop
 
@@ -430,6 +476,7 @@ Then:
 - [ ] Tasks guarded by `-If` on both a `$Skip*` flag and their required properties
 - [ ] Tasks attached to `*Core` stages, leaving `Pre*`/`Post*` for consumers
 - [ ] Public functions have help blocks, copyright blocks and sibling `.Tests.ps1` files
+- [ ] Module installs, lookups and publishing use PSResourceGet (`*-PSResource*`), not PowerShellGet (`*-Module`, `*-PSRepository`)
 - [ ] `build.ps1`, `.zf/config.ps1`, `GitVersion.yml`, CI workflow and `<Name>.module.tests.ps1` present
 - [ ] `.zf/extensions.lock.json` committed; `.zf/extensions/` git-ignored
 - [ ] `./build.ps1 -Tasks '?'` lists the new tasks; module tests pass
