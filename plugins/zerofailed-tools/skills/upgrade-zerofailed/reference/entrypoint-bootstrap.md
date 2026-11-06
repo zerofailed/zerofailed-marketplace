@@ -190,8 +190,7 @@ The template code that this region replaces had lines that are left out on purpo
 the script has them:
 
 - `Import-Module Microsoft.PowerShell.PSResourceGet`. PowerShell loads the module automatically when
-  `Get-InstalledPSResource` is first used, which is before `$PSModuleAutoloadingPreference` is set to
-  `'none'`.
+  `Get-InstalledPSResource` is first used.
 - `-Reinstall:$($ZfModuleVersion -match '-')` and `| Out-Null` on `Install-PSResource`. The module is only
   installed when it is missing, and the install's output is useful in a CI log.
 - `$splat.Add("RequiredVersion", …)`. The manifest is imported by its path, which already identifies the
@@ -225,8 +224,6 @@ Set the variable after the `Initialise build framework` region, and before the c
 dot-sourced:
 
 ```powershell
-$PSModuleAutoloadingPreference = 'none'
-
 # ZeroFailed reads the extensions lock mode from this variable, unless ZF_EXTENSIONS_LOCK_MODE is set
 $zerofailedExtensionsLockMode = $ZfExtensionsLockMode
 ```
