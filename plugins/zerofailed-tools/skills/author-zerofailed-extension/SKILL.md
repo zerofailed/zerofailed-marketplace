@@ -469,7 +469,8 @@ What each part does:
   `$PSRepositoryApiKey`, which is set from `ZF_BUILD_PS_REPOSITORY_APIKEY`.
 - **`$PSMarkdownDocs*`** writes the function reference to `docs/functions/`, as one file for each
   function, with no module page. Regenerate `HELP.md` and `docs/` rather than editing them by hand.
-- **`$CreateGitHubRelease = $true`** enables the release task. The release, like publishing, runs only
+- **`$CreateGitHubRelease = $true`** keeps the release task on. This is the default, but older commits of
+  `ZeroFailed.Build.GitHub` defaulted to `$false`, so set it explicitly. The release, like publishing, runs only
   in the `Publish` stage. `FullBuild` doesn't include that stage, so a local `./build.ps1` never
   publishes or creates a release.
 - **`$RequiredPowerShellModules`** lists the modules that the extension's own tests need. See
@@ -629,6 +630,6 @@ Then:
 - [ ] `.zf/extensions.lock.json` committed; `.zf/extensions/` git-ignored
 - [ ] `./build.ps1 -Tasks '?'` lists the new tasks; module tests pass
 - [ ] `build.ps1` uses the reference bootstrap from `upgrade-zerofailed`, with the latest ZeroFailed version
-- [ ] `.zf/config.ps1` publishes to PSGallery (stable only) and GitHub Packages, and enables `CreateGitHubRelease`
+- [ ] `.zf/config.ps1` publishes to PSGallery (stable only) and GitHub Packages, and sets `$CreateGitHubRelease = $true`
 - [ ] The workflow passes `ZF_BUILD_PS_REPOSITORY_APIKEY` and `ZF_BUILD_GITHUB_PACKAGES_TOKEN`, and has `contents: write` and `packages: write`
 - [ ] `README.md` states the component types supplied, dependencies, prerequisites and getting-started config snippet; `HELP.md` regenerated
