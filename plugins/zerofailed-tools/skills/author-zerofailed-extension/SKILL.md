@@ -34,7 +34,8 @@ good models.
 <repo-root>/
 ├── .github/workflows/build.yml         # CI — usually the shared endjin run-build-process action
 ├── .zf/config.ps1                      # this repo's OWN build (it builds itself with ZeroFailed)
-├── build.ps1                           # boilerplate entrypoint
+├── .zf/extensions.lock.json            # committed lock file for the repo's own build
+├── build.ps1                           # entrypoint — the reference bootstrap from upgrade-zerofailed
 ├── GitVersion.yml
 ├── HELP.md                             # generated reference for tasks & properties
 ├── LICENSE
@@ -380,9 +381,16 @@ When you migrate an extension from PowerShellGet, update its Pester tests too: m
 
 ## The extension's own build
 
-An extension builds and publishes itself with ZeroFailed, using
-[ZeroFailed.Build.PowerShell](https://github.com/zerofailed/ZeroFailed.Build.PowerShell). Copy `build.ps1`
-verbatim from an existing extension and write `.zf/config.ps1` as:
+An extension uses ZeroFailed to build, test, document, publish and release itself. It needs four files:
+
+| File | What to do |
+|---|---|
+| `build.ps1` | Use the reference bootstrap code in [`upgrade-zerofailed`](../upgrade-zerofailed/reference/entrypoint-bootstrap.md), with the latest ZeroFailed version. Don't copy `build.ps1` from an older extension: it may still have the 1.x bootstrap. |
+| `.zf/config.ps1` | Configure the build as shown below. |
+| `.zf/extensions.lock.json` | Generate it with `./build.ps1 -Tasks '?'`, and commit it. CI runs in `Frozen` lock mode. |
+| `.github/workflows/build.yml` | Run the build with the `run-build-process` action, and pass the publishing secrets (see below). |
+
+Configure `.zf/config.ps1` like this (from `ZeroFailed.Build.Containers`):
 
 ```powershell
 # Extensions setup
@@ -392,6 +400,11 @@ $zerofailedExtensions = @(
         GitRepository = "https://github.com/zerofailed/ZeroFailed.Build.PowerShell.git"
         GitRef = "main"
     }
+    @{
+        Name = "ZeroFailed.Build.GitHub"
+        GitRepository = "https://github.com/zerofailed/ZeroFailed.Build.GitHub.git"
+        GitRef = "main"
+    }
 )
 
 # Load the tasks and process
@@ -399,6 +412,7 @@ $zerofailedExtensions = @(
 
 # Set the required build options
 $PesterTestsDir = "$here/module"
+$PesterCodeCoveragePaths = @("$PesterTestsDir/functions")
 $PowerShellModulesToPublish = @(
     @{
         ModulePath = "$here/module/<Name>.psd1"
@@ -407,17 +421,110 @@ $PowerShellModulesToPublish = @(
         AliasesToExport = @()
     }
 )
+$PowerShellRepositories = @(
+    @{
+        Name = 'PSGallery'
+        ApiKey = { $PSRepositoryApiKey }
+        BlockPreReleaseVersions = $true
+    }
+    @{
+        Name = 'GitHubPackages'
+        SourceLocation = 'https://nuget.pkg.github.com/zerofailed/index.json'
+        ApiKey = { $env:ZF_BUILD_GITHUB_PACKAGES_TOKEN }
+        Credential = {
+            if ($env:ZF_BUILD_GITHUB_PACKAGES_TOKEN) {
+                [pscredential]::new('github-actions', (ConvertTo-SecureString $env:ZF_BUILD_GITHUB_PACKAGES_TOKEN -AsPlainText -Force))
+            }
+        }
+    }
+)
+
+$PSMarkdownDocsFlattenOutputPath = $true
+$PSMarkdownDocsOutputPath = './docs/functions'
+$PSMarkdownDocsIncludeModulePage = $false
+
+$CreateGitHubRelease = $true
+
+# Unit tests for the ACR Tasks build configuration require this module
+$RequiredPowerShellModules = @{
+    'powershell-yaml' = @{ version = '[0.4.7,1.0)'; repository = 'PSGallery' }
+}
 
 # Customise the build process
 task . FullBuild
 ```
 
-Set `$PesterCodeCoverageEnabled = $false` if the extension exports no functions (tasks-only extensions).
-`ZeroFailed.Build.PowerShell` also provides the PlatyPS-based documentation tasks that generate the
-markdown reference — regenerate `HELP.md` / `docs/` rather than hand-editing them. From version 2.0 it
-publishes with PSResourceGet: any `RequiredModules` in the manifest must be in each target repository
-(or be listed in `PSData.ExternalModuleDependencies`), and must not use a wildcard `MaximumVersion` — see
-`build-powershell`.
+What each part does:
+
+- **`ZeroFailed.Build.PowerShell`** runs the Pester tests, generates the function reference with PlatyPS,
+  and publishes the module. See [`build-powershell`](../build-powershell/SKILL.md).
+- **`ZeroFailed.Build.GitHub`** creates a GitHub release for the version. See
+  [`build-github`](../build-github/SKILL.md).
+- **`$PesterCodeCoveragePaths`** measures code coverage for the functions only. Set
+  `$PesterCodeCoverageEnabled = $false` instead if the extension exports no functions (a tasks-only
+  extension).
+- **`$PowerShellRepositories`** publishes every version to GitHub Packages, and only stable versions to
+  PSGallery (`BlockPreReleaseVersions`). The `ApiKey` and `Credential` scriptblocks are evaluated when the
+  build publishes, so the build reads the secrets from the environment at that point. PSGallery uses
+  `$PSRepositoryApiKey`, which is set from `ZF_BUILD_PS_REPOSITORY_APIKEY`.
+- **`$PSMarkdownDocs*`** writes the function reference to `docs/functions/`, as one file for each
+  function, with no module page. Regenerate `HELP.md` and `docs/` rather than editing them by hand.
+- **`$CreateGitHubRelease = $true`** enables the release task. The release, like publishing, runs only
+  in the `Publish` stage. `FullBuild` doesn't include that stage, so a local `./build.ps1` never
+  publishes or creates a release.
+- **`$RequiredPowerShellModules`** lists the modules that the extension's own tests need. See
+  [Installing and publishing modules](#installing-and-publishing-modules).
+
+`ZeroFailed.Build.PowerShell` 2.0 and later publishes with PSResourceGet. Any `RequiredModules` in the
+manifest must be in each target repository (or be listed in `PSData.ExternalModuleDependencies`), and must
+not use a wildcard `MaximumVersion`.
+
+### The workflow
+
+The `run-build-process` action runs `FullBuildAndPublish` for a tag, or when the `forcePublish` input is
+true. It runs `FullBuild` for every other trigger. So a module version is published, and a release is
+created, only when you push a tag.
+
+Pass both publishing secrets to the build through `prepare-env-vars-and-secrets`:
+
+```yaml
+permissions:
+  checks: write         # test result annotations
+  contents: write       # create the GitHub release
+  issues: read
+  packages: write       # publish to GitHub Packages, and install ZeroFailed from it
+  pull-requests: write  # test result annotations
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: endjin/Endjin.RecommendedPractices.GitHubActions/actions/prepare-env-vars-and-secrets@main
+      id: prepareEnvVarsAndSecrets
+      with:
+        environmentVariablesYaml: |
+          ZF_GITHUB_SKIP_CREATE_RELEASE: false
+        secretsYaml: |
+          ZF_BUILD_PS_REPOSITORY_APIKEY: ${{ secrets.PSGALLERY_APIKEY }}
+          ZF_BUILD_GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        secretsEncryptionKey: ${{ secrets.SHARED_WORKFLOW_KEY }}
+
+    - uses: endjin/Endjin.RecommendedPractices.GitHubActions/actions/run-build-process@main
+      id: run_build
+      with:
+        netSdkVersion: '8.x'
+        forcePublish: ${{ github.event.inputs.forcePublish == 'true' }}
+        buildEnv: ${{ steps.prepareEnvVarsAndSecrets.outputs.environmentVariablesYamlBase64 }}
+        buildSecrets: ${{ steps.prepareEnvVarsAndSecrets.outputs.secretsYamlBase64 }}
+        secretsEncryptionKey: ${{ secrets.SHARED_WORKFLOW_KEY }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+If you add the `GitHubPackages` entry to `$PowerShellRepositories`, also add
+`ZF_BUILD_GITHUB_PACKAGES_TOKEN` to the workflow. Without it, the publish to GitHub Packages has no API key,
+and a tagged build fails at that point, after it may already have published to PSGallery. The
+`run-build-process` action's `token` input is a separate setting: the bootstrap code in `build.ps1` uses it
+to install ZeroFailed from GitHub Packages. For other workflow shapes, see [`cicd-gha`](../cicd-gha/SKILL.md).
 
 ## Test loop
 
@@ -521,4 +628,7 @@ Then:
 - [ ] `build.ps1`, `.zf/config.ps1`, `GitVersion.yml`, CI workflow and `<Name>.module.tests.ps1` present
 - [ ] `.zf/extensions.lock.json` committed; `.zf/extensions/` git-ignored
 - [ ] `./build.ps1 -Tasks '?'` lists the new tasks; module tests pass
+- [ ] `build.ps1` uses the reference bootstrap from `upgrade-zerofailed`, with the latest ZeroFailed version
+- [ ] `.zf/config.ps1` publishes to PSGallery (stable only) and GitHub Packages, and enables `CreateGitHubRelease`
+- [ ] The workflow passes `ZF_BUILD_PS_REPOSITORY_APIKEY` and `ZF_BUILD_GITHUB_PACKAGES_TOKEN`, and has `contents: write` and `packages: write`
 - [ ] `README.md` states the component types supplied, dependencies, prerequisites and getting-started config snippet; `HELP.md` regenerated
