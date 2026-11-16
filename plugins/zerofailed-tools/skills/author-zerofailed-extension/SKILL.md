@@ -335,6 +335,46 @@ task EnsurePlatyPSModule -If { !$SkipGeneratePSMarkdownDocs } -Before setupModul
 }
 ```
 
+Follow these rules for this pattern:
+
+- **Gate the task on the code path that needs the module.** Use the same `-If` conditions as the task
+  or branch that calls the module's commands, so builds that don't use that feature don't install it.
+  For example, `ZeroFailed.Build.Containers` needs `powershell-yaml` only to generate the ACR Tasks
+  config file:
+
+  ```powershell
+  # Synopsis: When building images via ACR Tasks, ensures the 'powershell-yaml' module (used to generate the ACR Tasks config file) is installed by the 'setupModules' task provided by the ZeroFailed.DevOps.Common extension.
+  task EnsurePowerShellYamlModule -If { $UseAcrTasks -and !$SkipBuildContainerImages -and $ContainersToBuild } -Before setupModules {
+      if (!$RequiredPowerShellModules.ContainsKey('powershell-yaml')) {
+          $script:RequiredPowerShellModules += @{
+              'powershell-yaml' = @{ version = '[0.4.7,1.0)'; repository = 'PSGallery' }
+          }
+      }
+  }
+  ```
+
+- **Check `ContainsKey` before adding.** Then a version that the consumer pins in their own
+  `$RequiredPowerShellModules` takes precedence. Assign the result to `$script:RequiredPowerShellModules`,
+  so that `setupModules` sees it.
+- **Give a version range and `repository = 'PSGallery'`.** Use a range that excludes the next major
+  version (e.g. `'[0.4.7,1.0)'`).
+- **Don't also list the module in the manifest's `RequiredModules`.** That makes it a hard dependency of
+  the extension module itself, and `Publish-PSResource` then checks for it in every target repository.
+- **This task doesn't run in the extension's own build.** The `-If` conditions are normally false there,
+  so the module isn't installed for the extension's Pester tests. If a test calls the module's commands
+  without mocking them, add the module to `$RequiredPowerShellModules` in the extension's own
+  `.zf/config.ps1`, after `. ZeroFailed.tasks`:
+
+  ```powershell
+  # Unit tests for the ACR Tasks build configuration require this module
+  $RequiredPowerShellModules = @{
+      'powershell-yaml' = @{ version = '[0.4.7,1.0)'; repository = 'PSGallery' }
+  }
+  ```
+
+- **Document the module** in the README's prerequisites, and say which feature needs it and that it is
+  installed automatically.
+
 When you migrate an extension from PowerShellGet, update its Pester tests too: mocks of `Install-Module`,
 `Find-Module` and so on no longer match, so a test can pass while the real command is called.
 
@@ -476,6 +516,7 @@ Then:
 - [ ] Tasks guarded by `-If` on both a `$Skip*` flag and their required properties
 - [ ] Tasks attached to `*Core` stages, leaving `Pre*`/`Post*` for consumers
 - [ ] Public functions have help blocks, copyright blocks and sibling `.Tests.ps1` files
+- [ ] PowerShell modules that tasks need are added to `$RequiredPowerShellModules` by a task that runs `-Before setupModules`, gated on the feature that needs them; the extension's own `.zf/config.ps1` lists any that its tests need
 - [ ] Module installs, lookups and publishing use PSResourceGet (`*-PSResource*`), not PowerShellGet (`*-Module`, `*-PSRepository`)
 - [ ] `build.ps1`, `.zf/config.ps1`, `GitVersion.yml`, CI workflow and `<Name>.module.tests.ps1` present
 - [ ] `.zf/extensions.lock.json` committed; `.zf/extensions/` git-ignored
