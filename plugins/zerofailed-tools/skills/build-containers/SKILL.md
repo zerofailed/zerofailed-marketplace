@@ -30,6 +30,10 @@ necessarily both at once):
   plain docker registry.
 - **Azure CLI** — required when building via ACR Tasks (`UseAcrTasks = $true`) or publishing to Azure
   Container Registry (`ContainerRegistryType = "acr"`); must have an authenticated session.
+- **[powershell-yaml](https://www.powershellgallery.com/packages/powershell-yaml) PowerShell module**
+  (`[0.4.7,1.0)`): required only when building via ACR Tasks, to generate the `acr-tasks-config.g.yaml`
+  file. You don't need to install it yourself. When `UseAcrTasks` is true, `EnsurePowerShellYamlModule`
+  adds it to `RequiredPowerShellModules`, and `setupModules` (from `ZeroFailed.DevOps.Common`) installs it.
 
 ## Properties
 
@@ -85,6 +89,7 @@ $ContainersToBuild = @(
 |---|---|---|
 | `EnsureLocalDockerDaemon` | Package | Verifies a local Docker daemon is available (local build path); throws if not. |
 | `EnsureAzCliConnectionForACR` | Package | Verifies an authenticated Azure CLI connection (ACR Tasks path); throws if not. |
+| `EnsurePowerShellYamlModule` | `-Before setupModules` (Init) | ACR Tasks path only (`UseAcrTasks`, with images to build): adds `powershell-yaml` to `$RequiredPowerShellModules` so `setupModules` installs it. Leaves an entry the consumer has already set unchanged. |
 | `GenerateContainerBuildTag` | Package | Generates the shared image tag for all containers, from GitVersion or `ContainerImageVersionOverride`. |
 | `BuildContainerImages` | `PackageCore` | Builds each entry in `$ContainersToBuild`, locally via `docker build` or remotely via ACR Tasks per `$UseAcrTasks`. |
 | `OutputContainerImageTagArtefact` | Publish | Writes the generated image tag to `$ContainerImageTagArtefactPath`. |
@@ -136,3 +141,6 @@ For an end-to-end example, see the
 - `UseAcrTasks` and `ContainerRegistryType = 'acr'` are independent switches: the former controls where the
   *build* happens, the latter where the image is *published*. A local build can still publish to ACR, and
   vice versa.
+- To pin a different `powershell-yaml` version for ACR Tasks builds, add your own `'powershell-yaml'` entry
+  to `$RequiredPowerShellModules` in `.zf/config.ps1`. `EnsurePowerShellYamlModule` doesn't overwrite an
+  existing entry.
