@@ -31,7 +31,9 @@ workflows that run the scripts, see [`cicd-gha`](../cicd-gha/SKILL.md).
 
 ## Before you start
 
-- PowerShell 7.1 or later, with Microsoft.PowerShell.PSResourceGet (included in PowerShell 7.4 and later).
+- PowerShell 7.4 or later. This is the first version that includes Microsoft.PowerShell.PSResourceGet,
+  which the bootstrap code uses. The upgraded scripts require 7.4, so every machine and CI agent that runs
+  them needs it too. GitHub-hosted runners already have it.
 - `git` and the `gh` CLI, to find the latest release and to check the CI run.
 - Docker, for the clean Linux check in step 6. This is optional, but it is the only local check that
   catches problems that occur only on Linux.
@@ -94,7 +96,8 @@ From 1.x to 2.0 (zerofailed/ZeroFailed#14):
 - Each process records its extensions in a lock file, `<ZfPath>/extensions.lock.json`. The lock modes are
   `Write` (the default), `Frozen` and `Off`.
 - Extensions and their dependencies can ask for a `MinimumVersion`.
-- PowerShell 7.1 or later is required, so set `#Requires -Version 7.1`.
+- The ZeroFailed module requires PowerShell 7.1 or later. The entry-point scripts need 7.4 or later,
+  for PSResourceGet, so set `#Requires -Version 7.4` (see step 2).
 - A local `Path` extension that is missing is no longer registered: the run warns and continues without it.
 
 The [gotchas in `author-zerofailed-extension`](../author-zerofailed-extension/SKILL.md#gotchas) describe
@@ -334,7 +337,7 @@ file, not in the bootstrap code. Check that the file it needs is in the copy.
 
 - [ ] Every entry-point script, its config file, its `ZfPath` and the workflows that run it are listed
 - [ ] `$ZfModuleVersion` is the latest release, and the release notes since the old version are applied
-- [ ] Each script has `#Requires -Version 7.1` and the reference bootstrap code
+- [ ] Each script has `#Requires -Version 7.4` and the reference bootstrap code
 - [ ] No PowerShellGet commands are left in the scripts, config files or custom tasks (the step 0 search
       finds nothing)
 - [ ] Each process with its own extensions has its own `.zf/<process>/` folder, and `.gitignore` has

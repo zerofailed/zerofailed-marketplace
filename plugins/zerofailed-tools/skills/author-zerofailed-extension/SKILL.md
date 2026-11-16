@@ -301,7 +301,8 @@ extension gets transitively: `Resolve-Value`, `Install-DotNetTool`, `Get-DotNetT
 Use **PSResourceGet** (`Microsoft.PowerShell.PSResourceGet`) for every PowerShell module operation in
 tasks and functions — never PowerShellGet (`Install-Module`, `Find-Module`, …). ZeroFailed itself, the
 entry-point bootstrap, `ZeroFailed.DevOps.Common`'s `setupModules` task and `ZeroFailed.Build.PowerShell`
-2.x all use PSResourceGet. PSResourceGet is included in PowerShell 7.4 and later.
+2.x all use PSResourceGet. PSResourceGet is included in PowerShell 7.4 and later, which is why the
+entry-point scripts require 7.4. Don't add code to install PSResourceGet on older versions.
 
 The two modules keep **separate repository lists**, so mixing them causes failures that are hard to
 diagnose: a repository registered with `Register-PSRepository` is not found by `Find-PSResource` or
@@ -611,8 +612,10 @@ Then:
   `ZF_EXTENSIONS_LOCK_MODE` overrides the lock mode (typically `Frozen` in CI). Useful for testing an
   unreleased extension across many repos; surprising if you forget one is set. A `ZF_EXTENSIONS` override
   that differs from the committed lock file fails a `Frozen` run, so pair it with `Write` or `Off`.
-- **PowerShell 7.1+.** The core `ZeroFailed` module requires PowerShell 7.1 or later; a `build.ps1`
-  copied from an older extension may still say `#Requires -Version 7` — update it to `7.1`.
+- **PowerShell 7.4+ for entry-point scripts.** The core `ZeroFailed` module requires PowerShell 7.1 or
+  later, but `build.ps1` and other entry-point scripts need 7.4, the first version that includes
+  PSResourceGet. A `build.ps1` copied from an older extension may still say `#Requires -Version 7` or
+  `7.1`. Change it to `7.4`, rather than adding code that installs PSResourceGet.
 
 ## Checklist
 
