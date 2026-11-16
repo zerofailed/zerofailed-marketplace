@@ -32,21 +32,27 @@ repository, must be available on `PATH`.
 
 | Property | Default | Env var | Effect |
 |---|---|---|---|
-| `CreateGitHubRelease` | `$false` | `ZF_GITHUB_SKIP_CREATE_RELEASE` | When `$true`, a GitHub release is created with the current build version. Off by default — must be explicitly enabled. |
+| `CreateGitHubRelease` | `$true` | `ZF_GITHUB_SKIP_CREATE_RELEASE` (inverted) | When `$true`, a GitHub release is created with the current build version. Set `ZF_GITHUB_SKIP_CREATE_RELEASE=true` to turn it off. |
 | `GitHubReleaseArtefacts` | `@()` | — | Array of file paths to attach as GitHub release assets. NuGet packages do not need to be listed here — they're attached automatically when `PublishNuGetPackagesAsGitHubReleaseArtefacts` is `$true`. |
 | `GitHubReleaseArtefactsManifestFilePath` | `"github-release-artefacts.log"` | — | File that records the set of files added as release artifacts. |
 | `PublishNuGetPackagesAsGitHubReleaseArtefacts` | `$false` | `ZF_GITHUB_RELEASE_INCLUDE_NUGET_PACKAGES` | When `$true`, any published NuGet packages are also attached as release assets. |
 | `GitHubReleaseDryRunMode` | `$false` | `ZF_GITHUB_RELEASE_DRY_RUN_MODE` | When `$true`, no release is actually created. Intended for the extension's own Pester tests, not routine use. |
 
-Note the naming inversion on `CreateGitHubRelease`: it is a plain opt-in flag (default off), whereas its env
-var, `ZF_GITHUB_SKIP_CREATE_RELEASE`, is named as if it were a skip-flag. Treat the *property* default and
-semantics (from HELP.md) as authoritative if the env var name looks like it should default the other way.
+`CreateGitHubRelease` is set to the opposite of `ZF_GITHUB_SKIP_CREATE_RELEASE`:
+`$CreateGitHubRelease = -not [Convert]::ToBoolean((property ZF_GITHUB_SKIP_CREATE_RELEASE $false))`. So the
+release is created by default, and `ZF_GITHUB_SKIP_CREATE_RELEASE=true` turns it off. The extension's
+`HELP.md` still gives the default as `$false`. That was the behaviour before
+[zerofailed/ZeroFailed.Build.GitHub#9](https://github.com/zerofailed/ZeroFailed.Build.GitHub/pull/9)
+(2 November 2026). Before that change, the property took the environment variable's value directly, so
+`ZF_GITHUB_SKIP_CREATE_RELEASE=true` turned the release *on*. The extension has no release tags, so a
+consumer with `GitRef = "main"` gets the new behaviour. A consumer that is locked or pinned to an older
+commit still has the old behaviour.
 
 ## Tasks
 
 | Task | Attaches at | What it does |
 |---|---|---|
-| `PublishGitHubRelease` | `PublishCore` | Creates or updates a GitHub release for the current version and attaches configured artifacts (and published NuGet packages if enabled). No-ops unless `CreateGitHubRelease` is `$true`. |
+| `PublishGitHubRelease` | `PublishCore` | Creates or updates a GitHub release for the current version and attaches configured artifacts (and published NuGet packages if enabled). Skipped when `CreateGitHubRelease` is `$false`. |
 
 ## Usage
 
@@ -63,8 +69,8 @@ $zerofailedExtensions = @(
 # Load the tasks and process
 . ZeroFailed.tasks -ZfPath $here/.zf
 
-# Required build options
-$CreateGitHubRelease = $true
+# Build options
+$CreateGitHubRelease = $true    # the default; set it explicitly so the config doesn't depend on the extension's version
 $GitHubReleaseArtefacts = @("$here/dist/my-tool.zip")
 $PublishNuGetPackagesAsGitHubReleaseArtefacts = $true
 
@@ -74,7 +80,10 @@ task . FullBuildAndPublish
 
 ## Gotchas
 
-- `CreateGitHubRelease` defaults to `$false` — the task is a guaranteed no-op until a consuming repo opts in;
-  don't assume enabling the extension alone produces a release.
+- `CreateGitHubRelease` defaults to `$true`, so adding the extension is enough to create a release. The
+  release runs only in the `Publish` stage. `FullBuild` doesn't include that stage, so a local build
+  doesn't create a release, but `FullBuildAndPublish` does. To turn the release off, set
+  `$CreateGitHubRelease = $false` in `.zf/config.ps1`, or set `ZF_GITHUB_SKIP_CREATE_RELEASE=true`. A value
+  that `.zf/config.ps1` assigns takes precedence over the environment variable.
 - Requires an authenticated `gh` CLI session in the build environment (e.g. `GH_TOKEN`/`GITHUB_TOKEN` set, or
   `gh auth login` already run) — the task itself has no separate credential property.
