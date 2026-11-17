@@ -15,11 +15,13 @@ The script has five parts. Replace parts 1–4, and update the config path in pa
 
 ## 1. `#Requires` and the bootstrap parameters
 
-ZeroFailed 2.0 needs PowerShell 7.1 or later. Scripts copied from older templates often say
-`#Requires -Version 7`.
+An entry-point script needs PowerShell 7.4 or later. 7.4 is the first version that includes
+Microsoft.PowerShell.PSResourceGet, which the bootstrap code uses to install InvokeBuild and ZeroFailed. The
+script doesn't install PSResourceGet itself. The ZeroFailed module only needs 7.1, but the scripts need
+7.4. Scripts copied from older templates often say `#Requires -Version 7` or `#Requires -Version 7.1`.
 
 ```powershell
-#Requires -Version 7.1
+#Requires -Version 7.4
 ```
 
 Add these entries to the comment-based help. Replace any older text for `ZfModulePath` and `ZfModuleVersion`

@@ -34,7 +34,8 @@ registering repositories, finding and publishing modules) uses
   [Microsoft.PowerShell.PlatyPS](https://github.com/PowerShell/platyPS) 1.x are installed automatically
   as needed.
 - **PSResourceGet:** `Microsoft.PowerShell.PSResourceGet` must be available. It is included in PowerShell
-  7.4 and later, and the ZeroFailed entry-point bootstrap already needs it (see `upgrade-zerofailed`).
+  7.4 and later. The ZeroFailed entry-point scripts require PowerShell 7.4 for this reason (see
+  `upgrade-zerofailed`).
 
 ## Properties
 
