@@ -18,7 +18,10 @@ deployment at `Provision`, and App Service/App Insights/firewall-teardown work a
 | Extension | Reference | Ref |
 |---|---|---|
 | [ZeroFailed.Deploy.Common](https://github.com/zerofailed/ZeroFailed.Deploy.Common) | git | `main` |
-| [ZeroFailed.DevOps.Common](https://github.com/zerofailed/ZeroFailed.DevOps.Common) | git | `main` |
+| [ZeroFailed.DevOps.Common](https://github.com/zerofailed/ZeroFailed.DevOps.Common) | git (through `ZeroFailed.Deploy.Common`) | `main` |
+
+The module manifest declares only `ZeroFailed.Deploy.Common`. `ZeroFailed.DevOps.Common` comes in as its
+dependency.
 
 External prerequisites (must already be installed — not auto-installed by this extension):
 
@@ -67,6 +70,12 @@ $RequiredArmDeployments = @(
     }
 )
 ```
+
+An entry can also set these optional keys:
+
+- `scope`, `subscriptionId` and `managementGroupId`. See [Deployment scope](#deployment-scope).
+- `retryErrorPatterns`, `retryMaxAttempts` and `retryDelaySeconds`, which apply only to this deployment. See
+  [Retrying transient ARM deployment errors](#retrying-transient-arm-deployment-errors).
 
 #### Deployment scope
 
@@ -366,10 +375,11 @@ task . FullDeployment
   the template's own default.
 - **Keep secret template parameters as `SecureString`.** Az.Resources cannot serialize a `SecureString`
   inside `-TemplateParameterObject`. So the task converts each top-level `SecureString` parameter value to
-  plain text in a copy, immediately before the deployment runs. It does this after it writes the parameters to the
-  log, so the log shows `System.Security.SecureString`, not the secret. The caller's configuration keeps
-  the `SecureString`. A secret given as a plain string appears in the log. Declare the template parameter
-  with `@secure()` so that ARM does not log or return it.
+  plain text in a copy, immediately before the deployment runs. It does this after it writes the parameters
+  to the log, so the log shows `System.Security.SecureString`, not the secret. The caller's configuration
+  keeps the `SecureString`, and other values, including arrays, pass through unchanged. A secret given as a
+  plain string appears in the log. Declare the template parameter with `@secure()` so that ARM does not log
+  or return it.
 - **Remove proxy functions for `New-AzResourceGroupDeployment`.** Older versions of the extension failed
   with *"Unable to serialize secure string value"*, and had no retries. Some configs worked around this with
   a proxy function in `.zf/config.ps1`. Remove it, and set `retryErrorPatterns` on each deployment that
@@ -394,7 +404,7 @@ task . FullDeployment
   package to its deployment storage account as the identity that its deployment storage settings name. That
   identity needs a role such as Storage Blob Data Contributor on the account. A new role assignment can take
   more than 20 minutes to reach the deployment service. This happens, for example, when the ARM deployment
-  before this task creates the assignment for a new environment. Until then, the upload fails with HTTP 400 and a
-  `BlobUploadFailedException` that reports HTTP 403 from storage. `Publish-FlexConsumptionFunctionApp`
+  before this task creates the assignment for a new environment. Until then, the upload fails with HTTP 400
+  and a `BlobUploadFailedException` that reports HTTP 403 from storage. `Publish-FlexConsumptionFunctionApp`
   retries the upload every 30 seconds, for up to `AppServiceFlexStorageAccessRetrySeconds` (1200 by
   default). If the role assignments always exist before the deployment, set it to `0` to fail at once.
