@@ -1,6 +1,6 @@
 ---
 name: deploy-azure
-description: Use when configuring or troubleshooting a ZeroFailed deployment that uses ZeroFailed.Deploy.Azure — Azure ARM/Bicep deployments, App Service and Function App ZIP deployment (including the Flex Consumption plan), temporary firewall access, App Insights release annotations and Azure connection setup. Covers its properties, tasks, and dependency chain.
+description: Use when configuring or troubleshooting a ZeroFailed deployment that uses ZeroFailed.Deploy.Azure — Azure ARM/Bicep deployments (including retries of transient errors and SecureString template parameters), App Service and Function App ZIP deployment (including the Flex Consumption plan), temporary firewall access, App Insights release annotations and Azure connection setup. Covers its properties, tasks, and dependency chain.
 ---
 
 # ZeroFailed.Deploy.Azure
@@ -34,6 +34,9 @@ External prerequisites (must already be installed — not auto-installed by this
 |---|---|---|---|
 | `RequiredArmDeployments` | `@()` | — | Details the ARM/Bicep deployments to run. See [RequiredArmDeployments](#requiredarmdeployments) below. |
 | `SkipArmDeployments` | `$false` | `ZF_DEPLOY_SKIP_ARM_DEPLOYMENTS` | When true, skips any configured ARM deployments. |
+| `ArmDeploymentRetryErrorPatterns` | `@()` | — | Regular expressions that identify transient ARM deployment errors. A failed deployment or what-if whose errors match one of them runs again. When empty, the task never retries a failure. See [Retrying transient ARM deployment errors](#retrying-transient-arm-deployment-errors) below. |
+| `ArmDeploymentRetryMaxAttempts` | `3` | `ZF_DEPLOY_ARM_DEPLOYMENT_RETRY_MAX_ATTEMPTS` | The maximum number of attempts, including the first, for a deployment whose errors match `ArmDeploymentRetryErrorPatterns`. |
+| `ArmDeploymentRetryDelaySeconds` | `15` | `ZF_DEPLOY_ARM_DEPLOYMENT_RETRY_DELAY_SECONDS` | The delay before the first retry. Each later retry waits this delay multiplied by the number of failed attempts so far. |
 | `ForceBicepVersionCheck` | — | `ZF_DEPLOY_FORCE_BICEP_VERSION_CHECK` | When true, the available Bicep CLI version will be checked even if the ARM deployment does not reference a Bicep template. |
 | `MinimumBicepVersion` | — | `ZF_DEPLOY_MINIMUM_BICEP_VERSION` | Minimum Bicep CLI version required; if not found, the latest version is installed. |
 | `RequiredBicepVersion` | — | `ZF_DEPLOY_REQUIRED_BICEP_VERSION` | Ensures a specific Bicep CLI version is available; if not found, that version is installed. |
@@ -65,6 +68,35 @@ $RequiredArmDeployments = @(
     }
 )
 ```
+
+#### Retrying transient ARM deployment errors
+
+Some ARM deployment errors are transient: they clear when the same deployment runs again, for example
+after a race in an Azure resource provider. To retry these errors, list regular expressions that identify
+them in `ArmDeploymentRetryErrorPatterns`:
+
+```powershell
+$ArmDeploymentRetryErrorPatterns = @(
+    'RetryableError'                         # one pattern
+    , @(                                     # an array: all of its patterns must match
+        'Unable to get value using Managed identity'
+        'InvalidParameterValueInContainerTemplate'
+    )
+)
+$ArmDeploymentRetryMaxAttempts = 4
+$ArmDeploymentRetryDelaySeconds = 15         # waits 15s, 30s, then 45s
+```
+
+- The task tests each pattern, ignoring case, against the text of all the errors that the deployment
+  reports. This text includes the inner errors of a validation failure.
+- The task retries a failure when any entry matches. An entry that is an array matches only when all of its
+  patterns match. Use the leading comma (`, @(…)`) so that PowerShell keeps the array as one entry.
+- Any other error fails the deployment immediately.
+- Before each retry, the task writes a warning with the errors.
+- A retry runs the same deployment again, with the same deployment name. This is safe for a template that
+  is safe to deploy again.
+- The task retries a what-if operation in the same way. With `ArmWhatIfContinueOnError`, it reports the
+  warning only after the last attempt.
 
 ### Application deployment (App Service)
 
@@ -236,6 +268,15 @@ task . FullDeployment
   `$deploymentConfig` by name-matching convention; forgetting to list non-template config keys here can
   cause a deployment to fail parameter validation, or silently pass through a value that should have used
   the template's own default.
+- **Keep secret template parameters as `SecureString`.** Az.Resources cannot serialize a `SecureString`
+  inside `-TemplateParameterObject`. So the task converts each top-level `SecureString` parameter value to
+  plain text in a copy, immediately before the deployment runs. It does this after it writes the parameters to the
+  log, so the log shows `System.Security.SecureString`, not the secret. The caller's configuration keeps
+  the `SecureString`. A secret given as a plain string appears in the log. Declare the template parameter
+  with `@secure()` so that ARM does not log or return it.
+- **Remove proxy functions for `New-AzResourceGroupDeployment`.** Older versions of the extension failed
+  with *"Unable to serialize secure string value"*, and had no retries. Some configs worked around this with
+  a proxy function in `.zf/config.ps1`. Remove it, and use `ArmDeploymentRetryErrorPatterns` for retries.
 - **Flex Consumption deployments can fail on a timeout.** The task waits up to
   `AppServiceFlexDeploymentTimeoutSeconds` (600 by default) for each deployment to finish. A remote build can
   take longer, for example for a Python app that installs many packages. If the error says that the deployment
