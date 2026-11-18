@@ -36,9 +36,6 @@ External prerequisites (must already be installed — not auto-installed by this
 | `SkipArmDeployments` | `$false` | `ZF_DEPLOY_SKIP_ARM_DEPLOYMENTS` | When true, skips any configured ARM deployments. |
 | `ArmWhatIfMode` | `$false` | `ZF_DEPLOY_ARM_WHATIF_MODE` | When true, every configured ARM deployment runs as a what-if operation, which reports the predicted changes and deploys nothing. See [What-if mode](#what-if-mode) below. |
 | `ArmWhatIfContinueOnError` | `$false` | `ZF_DEPLOY_ARM_WHATIF_CONTINUE_ON_ERROR` | When true, and `ArmWhatIfMode` is true, the task reports a failed what-if operation as a warning and continues with the remaining deployments. This includes template build and validation errors, such as a Bicep compile error or a missing template file. Errors in the `RequiredArmDeployments` configuration itself still fail the process. |
-| `ArmDeploymentRetryErrorPatterns` | `@()` | — | Regular expressions that identify transient ARM deployment errors. A failed deployment or what-if whose errors match one of them runs again. When empty, the task never retries a failure. See [Retrying transient ARM deployment errors](#retrying-transient-arm-deployment-errors) below. |
-| `ArmDeploymentRetryMaxAttempts` | `3` | `ZF_DEPLOY_ARM_DEPLOYMENT_RETRY_MAX_ATTEMPTS` | The maximum number of attempts, including the first, for a deployment whose errors match `ArmDeploymentRetryErrorPatterns`. |
-| `ArmDeploymentRetryDelaySeconds` | `15` | `ZF_DEPLOY_ARM_DEPLOYMENT_RETRY_DELAY_SECONDS` | The delay before the first retry. Each later retry waits this delay multiplied by the number of failed attempts so far. |
 | `ForceBicepVersionCheck` | — | `ZF_DEPLOY_FORCE_BICEP_VERSION_CHECK` | When true, the available Bicep CLI version will be checked even if the ARM deployment does not reference a Bicep template. |
 | `MinimumBicepVersion` | — | `ZF_DEPLOY_MINIMUM_BICEP_VERSION` | Minimum Bicep CLI version required; if not found, the latest version is installed. |
 | `RequiredBicepVersion` | — | `ZF_DEPLOY_REQUIRED_BICEP_VERSION` | Ensures a specific Bicep CLI version is available; if not found, that version is installed. The task looks up the latest release (with the GitHub API) only for `latest`, a minimum version, or a missing installation. So a pinned version that is already installed needs no network access. |
@@ -149,21 +146,38 @@ Use it to find the deployment in the Azure portal.
 #### Retrying transient ARM deployment errors
 
 Some ARM deployment errors are transient: they clear when the same deployment runs again, for example
-after a race in an Azure resource provider. To retry these errors, list regular expressions that identify
-them in `ArmDeploymentRetryErrorPatterns`:
+after a race in an Azure resource provider. To retry these errors, set these optional keys on the
+deployment's entry in `RequiredArmDeployments`:
+
+| Key | Default | Effect |
+|---|---|---|
+| `retryErrorPatterns` | none | Regular expressions that identify the deployment's transient errors. Without them, the task never retries a failure. |
+| `retryMaxAttempts` | `3` | The maximum number of attempts, including the first. An integer from 1 to 100. |
+| `retryDelaySeconds` | `15` | The delay before the first retry. Each later retry waits this delay multiplied by the number of failed attempts so far. An integer from 0 to 3600. |
 
 ```powershell
-$ArmDeploymentRetryErrorPatterns = @(
-    'RetryableError'                         # one pattern
-    , @(                                     # an array: all of its patterns must match
-        'Unable to get value using Managed identity'
-        'InvalidParameterValueInContainerTemplate'
-    )
+$RequiredArmDeployments = @(
+    @{
+        templatePath = 'container-apps.bicep'
+        resourceGroupName = { $deploymentConfig.resourceGroupName }
+        location = 'uksouth'
+        retryErrorPatterns = @(
+            'RetryableError'                 # one pattern
+            , @(                             # an array: all of its patterns must match
+                'Unable to get value using Managed identity'
+                'InvalidParameterValueInContainerTemplate'
+            )
+        )
+        retryMaxAttempts = 4
+        retryDelaySeconds = 15               # waits 15s, 30s, then 45s
+    }
 )
-$ArmDeploymentRetryMaxAttempts = 4
-$ArmDeploymentRetryDelaySeconds = 15         # waits 15s, 30s, then 45s
 ```
 
+- The settings apply only to the deployment whose entry sets them. A pattern for one template's transient
+  error can match a real failure in another template, so there is no global retry setting.
+- The keys take static values. A scriptblock is not supported. An invalid `retryMaxAttempts` or
+  `retryDelaySeconds` fails the task before the deployment runs.
 - The task tests each pattern, ignoring case, against the text of all the errors that the deployment
   reports. This text includes the inner errors of a validation failure.
 - The task retries a failure when any entry matches. An entry that is an array matches only when all of its
@@ -358,7 +372,8 @@ task . FullDeployment
   with `@secure()` so that ARM does not log or return it.
 - **Remove proxy functions for `New-AzResourceGroupDeployment`.** Older versions of the extension failed
   with *"Unable to serialize secure string value"*, and had no retries. Some configs worked around this with
-  a proxy function in `.zf/config.ps1`. Remove it, and use `ArmDeploymentRetryErrorPatterns` for retries.
+  a proxy function in `.zf/config.ps1`. Remove it, and set `retryErrorPatterns` on each deployment that
+  needs retries.
 - **What-if mode previews only the ARM deployments.** The other tasks still make real changes. For example,
   `enableTemporaryNetworkAccess` still adds its firewall rules when `EnableTemporaryNetworkAccess` is true.
   For a what-if run that must change nothing, also set `EnableTemporaryNetworkAccess` to `$false`, and skip
