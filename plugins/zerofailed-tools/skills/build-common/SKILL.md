@@ -101,7 +101,7 @@ $zerofailedExtensions = @(
 | `UseGitVersion` | `$true` | `ZF_BUILD_USE_GITVERSION` | When true, uses the GitVersion tool to determine the version number. |
 | `SkipVersion` | `$false` | `ZF_BUILD_SKIP_VERSIONING` | When true, skips the entire `Version` stage (also gates every stage that depends on it). |
 | `GitVersionConfigPath` | `"./GitVersion.yml"` (alongside the running script) | `ZF_BUILD_GITVERSION_CONFIG_PATH` | Path to the GitVersion configuration file. |
-| `GitVersionToolVersion` | `"5.8.0"` | `ZF_BUILD_GITVERSION_TOOL_VERSION` | Version of the GitVersion .NET global tool to install and use. |
+| `GitVersionToolVersion` | `"5.8.0"` | `ZF_BUILD_GITVERSION_TOOL_VERSION` | Version of the GitVersion .NET global tool to install and use. Setting a `6.x` version needs changes to `GitVersion.yml` — see [reference/gitversion-v6-upgrade.md](reference/gitversion-v6-upgrade.md). |
 | `GitVersion` | `@{}` | `ZF_BUILD_GITVERSION_OVERRIDE` | When set, overrides the GitVersion tool's output entirely — useful to force a specific version unrelated to the current branch. Not set by default. |
 
 ## Tasks
@@ -166,3 +166,11 @@ task . FullBuild
   the built-in `FullBuild`/`FullBuildAndPublish` tasks already do the right thing.
 - **`ZeroFailed.DevOps.Common` is a real dependency**, not an assumption — don't skip installing/updating it
   independently if you're pinning extension versions, since `Build.Common`'s CI/CD detection relies on it.
+- **GitVersion v6 needs a different `GitVersion.yml`.** The default `GitVersionToolVersion` is still
+  `5.8.0`. When a repo sets it to `6.x`, the standardised v5 `GitVersion.yml` fails with
+  `Failed to parse 1.0 into a Semantic Version`. Fixing that error is not enough: v6 ignores `tag:` and
+  changed the meaning of the `mode` names, so without the other changes the build succeeds but `main`
+  loses its `-preview` label and feature branches get the same version on every commit. v6 also removed
+  output variables such as `NuGetPreReleaseTag`, which `ZeroFailed.Build.PowerShell` uses. See
+  [reference/gitversion-v6-upgrade.md](reference/gitversion-v6-upgrade.md) for the full set of changes,
+  the equivalent v6 configuration and the verified version differences.
