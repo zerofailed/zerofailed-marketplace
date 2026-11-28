@@ -64,7 +64,7 @@ claude plugin marketplace update zerofailed   # refresh on subsequent runs
 
 Skills are namespaced by plugin, so each can be invoked explicitly as `/zerofailed-tools:<skill-name>` — but explicit invocation is the exception. Each skill's frontmatter `description` states when it applies, and the agent loads the matching skill automatically when your question matches it, so normally you just ask.
 
-`zerofailed-tools` contains four kinds of skill:
+`zerofailed-tools` contains five kinds of skill:
 
 **Authoring** — `author-zerofailed-extension` covers the module layout, task and property conventions, extension dependency metadata, how to hook into the standard build process, and the local test loop. It triggers when you ask your agent to create a new ZeroFailed extension or add tasks, properties or functions to an existing one.
 
@@ -101,6 +101,14 @@ own `.zf` folder and lock file, makes GitHub Actions runs use `Frozen` lock mode
 permissions, and verifies the result with a clean Linux install. It triggers when you ask your agent to
 upgrade ZeroFailed, or to adopt the lock file or Frozen mode in CI.
 
+**Repository setup** — `apply-github-repo-settings` uses the `gh` CLI to apply the standard ZeroFailed
+GitHub repository settings to a repo: squash-only merges, auto-merge, branch deletion on merge, web commit
+sign-off and a read-only workflow token. It also adds a `main` ruleset on the default branch, which blocks
+deletion and force pushes and requires a linear history, a PR and a passing CI build. The skill finds the
+repo's CI build workflow, such as `build.yml`, and makes that workflow's check required. It always asks
+whether a PR needs one approval, so it suits both repos in early development and mature repos. It
+triggers when you ask your agent to set up a repo's GitHub settings or branch ruleset.
+
 Example prompts, and the skill each triggers:
 
 - "Why didn't my Pester tests run in this ZeroFailed build?" → `build-powershell`
@@ -108,6 +116,7 @@ Example prompts, and the skill each triggers:
 - "Which property turns off SBOM generation, and what's its env var?" → `build-dotnet`
 - "Add a GitHub Actions build workflow that publishes to NuGet on tag" → `cicd-gha`
 - "Upgrade this repo to the latest version of ZeroFailed" → `upgrade-zerofailed`
+- "Apply the standard GitHub settings and branch ruleset to this repo" → `apply-github-repo-settings`
 
 The ZF extension reference skills complement — not replace — each extension's own `HELP.md`: they were written by verifying the generated docs against the extension source, and they record discrepancies and gotchas where the two disagree.
 
